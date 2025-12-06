@@ -17,7 +17,7 @@ const useCartStore = create<CartStoreStateType & CartStoreActionsType>()(
           )
           if (existedIndex !== -1) {
             const updatedCart = [...state.cart]
-            updatedCart[existedIndex].quantity += product.quantity
+            updatedCart[existedIndex]!.quantity += product.quantity
             return { cart: updatedCart }
           }
           return {

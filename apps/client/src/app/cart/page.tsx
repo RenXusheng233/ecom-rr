@@ -3,7 +3,7 @@
 import PaymentForm from '@/components/CartForm/PaymentForm'
 import ShippingForm from '@/components/CartForm/ShippingForm'
 import useCartStore from '@/stores/cartStore'
-import { ShippingFormInputs, STEP } from '@/types'
+import { CartItemType, ShippingFormInputs, STEP } from '@/types'
 import { ArrowRight, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -133,7 +133,7 @@ const CartPage = () => {
                     {/* IMAGE */}
                     <div className="relative w-32 h-32 bg-gray-50 rounded-lg overflow-hidden">
                       <Image
-                        src={images[selectedColor]}
+                        src={images[selectedColor] || ''}
                         alt={name}
                         fill
                         sizes="auto"
@@ -160,7 +160,9 @@ const CartPage = () => {
                   </div>
                   {/* DELETE BUTTON */}
                   <button
-                    onClick={() => removeFromCart(cartItems[idx])}
+                    onClick={() =>
+                      removeFromCart(cartItems[idx] as CartItemType)
+                    }
                     className="w-8 h-8 rounded-full bg-red-100 text-red-500 flex items-center justify-center
                              cursor-pointer hover:bg-red-200 transition-all duration-300"
                   >

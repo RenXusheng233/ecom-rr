@@ -21,8 +21,8 @@ export type ProductType = {
   shortDescription: string
   description: string
   price: number
-  sizes: string[]
-  colors: string[]
+  sizes: [string, ...string[]]
+  colors: [string, ...string[]]
   images: Record<string, string>
 }
 

@@ -14,7 +14,7 @@ const ProductCard = ({ product }: { product: ProductType }) => {
   const [productTypes, setProductTypes] = useState({
     size: product.sizes[0],
     color: product.colors[0],
-  } as { size: string; color: string })
+  })
 
   const { addToCart } = useCartStore()
 
@@ -47,7 +47,7 @@ const ProductCard = ({ product }: { product: ProductType }) => {
       <Link href={`products/${id}`}>
         <div className="relative aspect-2/3">
           <Image
-            src={images[productTypes.color]}
+            src={images[productTypes.color] || ''}
             alt={name}
             className="object-cover hover:scale-105 transition-all duration-300"
             fill

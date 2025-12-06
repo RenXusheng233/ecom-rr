@@ -56,7 +56,7 @@ export const columns: ColumnDef<Product>[] = [
       return (
         <div className="w-9 h-9 relative">
           <Image
-            src={product.images[product.colors[0]]}
+            src={product?.images?.[product.colors[0] || ''] || ''}
             alt={product.name}
             fill
             sizes="auto"
