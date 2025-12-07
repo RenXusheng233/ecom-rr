@@ -1,2 +1,3 @@
 ## Prettier
+
 - Without the .prettierrc file, when I use "pnpm format" to format the whole project, I get many warnings in the files about "single quote" and "semi". I actually modified this configuration before, but I already deleted this. So, what causes these warnings?
