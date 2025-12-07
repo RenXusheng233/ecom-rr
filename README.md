@@ -15,3 +15,7 @@
 ## Order Service
 
 - Framework: Fastify
+
+## Payment Service
+
+- Framework: Hono
