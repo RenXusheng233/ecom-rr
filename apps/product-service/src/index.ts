@@ -1,4 +1,4 @@
-import express from 'express'
+import express, { Request, Response } from 'express'
 import cors from 'cors'
 
 const app = express()
@@ -10,6 +10,14 @@ app.use(
     credentials: true,
   }),
 )
+
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+  })
+})
 
 app.listen(port, () => {
   console.log(`Product service is running on port ${port}`)
