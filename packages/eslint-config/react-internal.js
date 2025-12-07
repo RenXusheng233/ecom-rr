@@ -1,5 +1,6 @@
 import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
+import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import tseslint from "typescript-eslint";
 import pluginReactHooks from "eslint-plugin-react-hooks";
 import pluginReact from "eslint-plugin-react";
@@ -14,6 +15,7 @@ export const config = [
   ...baseConfig,
   js.configs.recommended,
   eslintConfigPrettier,
+  eslintPluginPrettierRecommended,
   ...tseslint.configs.recommended,
   pluginReact.configs.flat.recommended,
   {
@@ -34,6 +36,7 @@ export const config = [
       ...pluginReactHooks.configs.recommended.rules,
       // React scope no longer necessary with new JSX transform.
       "react/react-in-jsx-scope": "off",
+      "prettier/prettier": "error"
     },
   },
 ];

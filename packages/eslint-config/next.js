@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import { globalIgnores } from "eslint/config";
 import eslintConfigPrettier from "eslint-config-prettier";
+import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import tseslint from "typescript-eslint";
 import pluginReactHooks from "eslint-plugin-react-hooks";
 import pluginReact from "eslint-plugin-react";
@@ -17,6 +18,7 @@ export const nextJsConfig = [
   ...baseConfig,
   js.configs.recommended,
   eslintConfigPrettier,
+  eslintPluginPrettierRecommended,
   ...tseslint.configs.recommended,
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -41,6 +43,7 @@ export const nextJsConfig = [
     rules: {
       ...pluginNext.configs.recommended.rules,
       ...pluginNext.configs["core-web-vitals"].rules,
+      "prettier/prettier": "error"
     },
   },
   {
