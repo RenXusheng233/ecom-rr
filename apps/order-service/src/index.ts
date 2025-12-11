@@ -1,22 +1,46 @@
 import Fastify from 'fastify'
+import { clerkClient, clerkPlugin } from '@clerk/fastify'
+import { shouldBeUser } from './middleware/authMiddleware'
 
 const fastify = Fastify()
 const port = 8001
 
+fastify.register(clerkPlugin)
+
 fastify.get('/health', (request, reply) => {
-  return reply.status(200).send({
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: Date.now(),
-  })
+  try {
+    return reply.code(200).send({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: Date.now(),
+    })
+  } catch (error) {
+    fastify.log.error(error)
+    reply.code(500).send({ error: 'Health check failed' })
+  }
+})
+
+fastify.get('/test', { preHandler: shouldBeUser }, async (request, reply) => {
+  try {
+    const user = await clerkClient.users.getUser(request.userId)
+    return reply.send({
+      message: 'User retrieved from order service',
+      user,
+    })
+  } catch (error) {
+    fastify.log.error(error)
+    return reply
+      .code(500)
+      .send({ error: 'Failed to retrieve user from order service' })
+  }
 })
 
 const start = async () => {
   try {
     await fastify.listen({ port })
     console.log(`Order service is running on port ${port}`)
-  } catch (err) {
-    fastify.log.error(err)
+  } catch (error) {
+    fastify.log.error(error)
     process.exit(1)
   }
 }

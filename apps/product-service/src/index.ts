@@ -1,8 +1,12 @@
 import express, { Request, Response } from 'express'
+import { clerkClient, clerkMiddleware } from '@clerk/express'
 import cors from 'cors'
+import { ShouldBeUser } from './middleware/authMiddleware.js'
 
 const app = express()
 const port = 8000
+
+app.use(clerkMiddleware())
 
 app.use(
   cors({
@@ -17,6 +21,11 @@ app.get('/health', (req: Request, res: Response) => {
     uptime: process.uptime(),
     timestamp: Date.now(),
   })
+})
+
+app.get('/test', ShouldBeUser, async (req: Request, res: Response) => {
+  const user = await clerkClient.users.getUser(req.userId)
+  res.json({ message: 'User retrieved from product service', user })
 })
 
 app.listen(port, () => {

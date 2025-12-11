@@ -1,7 +1,11 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { clerkMiddleware } from '@hono/clerk-auth'
+import { shouldBeUser } from './middleware/authMiddleware.js'
 
 const app = new Hono()
+
+app.use('*', clerkMiddleware())
 
 app.get('/health', (c) => {
   return c.json({
@@ -9,6 +13,26 @@ app.get('/health', (c) => {
     uptime: process.uptime(),
     timestamp: Date.now(),
   })
+})
+
+app.get('/test', shouldBeUser, async (c) => {
+  const clerkClient = c.get('clerk')
+  try {
+    const user = await clerkClient.users.getUser(c.get('userId'))
+
+    return c.json({
+      message: 'User retrieved from payment service',
+      user,
+    })
+  } catch (error) {
+    console.log(error)
+    return c.json(
+      {
+        message: 'Failed to retrieve user from payment service',
+      },
+      500,
+    )
+  }
 })
 
 const start = async () => {
