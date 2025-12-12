@@ -11,6 +11,7 @@
 ## Product Service
 
 - Framework: Express
+- Database: Postgres
 
 ## Order Service
 
@@ -19,3 +20,7 @@
 ## Payment Service
 
 - Framework: Hono
+
+## Authentication
+
+- clerk
