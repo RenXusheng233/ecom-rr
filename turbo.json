@@ -4,7 +4,8 @@
   "tasks": {
     "build": {
       "dependsOn": [
-        "^build"
+        "^build",
+        "^db:generate"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
@@ -15,7 +16,8 @@
         "!.next/cache/**"
       ],
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "NODE_ENV"
       ]
     },
     "lint": {
@@ -29,6 +31,9 @@
       ]
     },
     "dev": {
+      "dependsOn": [
+        "^db:generate"
+      ],
       "cache": false,
       "persistent": true
     },

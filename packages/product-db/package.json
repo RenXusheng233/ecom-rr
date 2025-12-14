@@ -9,6 +9,8 @@
     "db:reset": "prisma migrate reset"
   },
   "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
     "@types/pg": "^8.16.0",
     "prisma": "^7.1.0"
   },
@@ -17,5 +19,8 @@
     "@prisma/client": "^7.1.0",
     "dotenv": "^17.2.3",
     "pg": "^8.16.3"
+  },
+  "exports": {
+    ".": "./src/index.ts"
   }
 }

@@ -252,6 +252,9 @@ importers:
       '@clerk/express':
         specifier: ^1.7.57
         version: 1.7.57(express@5.2.1)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@repo/product-db':
+        specifier: workspace:*
+        version: link:../../packages/product-db
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -323,6 +326,12 @@ importers:
         specifier: ^8.16.3
         version: 8.16.3
     devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
       '@types/pg':
         specifier: ^8.16.0
         version: 8.16.0
