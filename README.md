@@ -16,6 +16,7 @@
 ## Order Service
 
 - Framework: Fastify
+- Database: MongoDB
 
 ## Payment Service
 
