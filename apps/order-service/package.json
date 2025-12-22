@@ -11,12 +11,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@repo/order-db": "workspace:*",
     "@clerk/fastify": "^2.6.9",
     "fastify": "^5.6.2"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@repo/types": "workspace:*",
     "@types/node": "^20",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"

@@ -1,0 +1,20 @@
+{
+  "name": "@repo/types",
+  "version": "0.0.0",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "check-types": "tsx --noEmit"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^25.0.3"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  }
+}
