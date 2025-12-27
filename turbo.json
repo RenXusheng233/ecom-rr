@@ -17,7 +17,8 @@
       ],
       "env": [
         "DATABASE_URL",
-        "NODE_ENV"
+        "NODE_ENV",
+        "STRIPE_SECRET_KEY"
       ]
     },
     "lint": {

@@ -21,6 +21,7 @@
 ## Payment Service
 
 - Framework: Hono
+- Payment: Stripe
 
 ## Authentication
 
