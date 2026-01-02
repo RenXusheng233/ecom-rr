@@ -1,36 +1,6 @@
-import { ReactElement } from 'react'
 import z from 'zod'
 import { paymentFormSchema, shippingFormSchema } from './schemas'
-
-export const ALL = 'all'
-export const CATEGORY = 'category'
-export const SORT = 'sort'
-export const STEP = 'step'
-export const SIZE = 'size'
-export const COLOR = 'color'
-
-export type Category = {
-  name: string
-  icon: ReactElement
-  slug: string
-}
-
-export type ProductType = {
-  id: number | string
-  name: string
-  shortDescription: string
-  description: string
-  price: number
-  sizes: [string, ...string[]]
-  colors: [string, ...string[]]
-  images: Record<string, string>
-}
-
-export type CartItemType = ProductType & {
-  quantity: number
-  selectedSize: string
-  selectedColor: string
-}
+import { CartItemType } from '@repo/types'
 
 export type ShippingFormInputs = z.infer<typeof shippingFormSchema>
 

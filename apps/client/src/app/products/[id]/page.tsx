@@ -1,5 +1,5 @@
 import ProductInteraction from '@/components/Product/ProductInteraction'
-import { ProductType } from '@/types'
+import { ProductType } from '@repo/types'
 import Image from 'next/image'
 
 // NOTE: TEMPORARY
@@ -18,6 +18,9 @@ const product: ProductType = {
     purple: '/products/1p.png',
     green: '/products/1gr.png',
   },
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  categorySlug: 'test',
 }
 
 export const generateMetadata = async ({
@@ -40,15 +43,17 @@ const ProductPage = async ({
   searchParams: Promise<{ size: string; color: string }>
 }) => {
   const { size, color } = await searchParams
-  const selectedSize = size || (product.sizes[0] as string)
-  const selectedColor = color || (product.colors[0] as string)
+  const selectedSize = size || product.sizes[0]!
+  const selectedColor = color || product.colors[0]!
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row md:gap-12 mt-12">
       {/* IMAGE */}
       <div className="w-full lg:w-6/12 relative aspect-2/3">
         <Image
-          src={product.images?.[selectedColor] || ''}
+          src={
+            (product.images as Record<string, string>)?.[selectedColor] || ''
+          }
           alt={product.name}
           fill
           sizes="auto"

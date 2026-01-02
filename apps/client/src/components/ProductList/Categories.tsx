@@ -1,6 +1,6 @@
 'use client'
 
-import { ALL, CATEGORY, Category } from '@/types'
+import { ReactElement } from 'react'
 import {
   Footprints,
   Glasses,
@@ -11,6 +11,15 @@ import {
   Venus,
 } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+
+export const ALL = 'all'
+export const CATEGORY = 'category'
+
+type Category = {
+  name: string
+  icon: ReactElement
+  slug: string
+}
 
 const categories: Category[] = [
   {

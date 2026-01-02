@@ -1,11 +1,14 @@
 'use client'
 
 import useCartStore from '@/stores/cartStore'
-import { COLOR, ProductType, SIZE } from '@/types'
+import { ProductType } from '@repo/types'
 import { Minus, Plus, ShoppingCart } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'react-toastify'
+
+const SIZE = 'size'
+const COLOR = 'color'
 
 const ProductInteraction = ({
   product,

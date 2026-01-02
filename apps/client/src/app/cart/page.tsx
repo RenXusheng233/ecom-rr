@@ -3,11 +3,14 @@
 import PaymentForm from '@/components/CartForm/PaymentForm'
 import ShippingForm from '@/components/CartForm/ShippingForm'
 import useCartStore from '@/stores/cartStore'
-import { CartItemType, ShippingFormInputs, STEP } from '@/types'
+import { ShippingFormInputs } from '@/types'
+import { CartItemType } from '@repo/types'
 import { ArrowRight, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
+
+const STEP = 'step'
 
 const steps = [
   { id: 1, title: 'Shopping Cart' },
@@ -133,7 +136,10 @@ const CartPage = () => {
                     {/* IMAGE */}
                     <div className="relative w-32 h-32 bg-gray-50 rounded-lg overflow-hidden">
                       <Image
-                        src={images[selectedColor] || ''}
+                        src={
+                          (images as Record<string, string>)?.[selectedColor] ||
+                          ''
+                        }
                         alt={name}
                         fill
                         sizes="auto"
@@ -174,6 +180,7 @@ const CartPage = () => {
           ) : activeStep === 2 ? (
             <ShippingForm setShippingForm={setShippingForm} />
           ) : activeStep === 3 && shippingForm ? (
+            // TODO: add stripe form
             <PaymentForm />
           ) : (
             <p className="text-sm text-gray-500">

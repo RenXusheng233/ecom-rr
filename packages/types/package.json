@@ -4,7 +4,10 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
-    "check-types": "tsx --noEmit"
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/product-db": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

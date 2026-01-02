@@ -1,7 +1,8 @@
 'use client'
 
-import { SORT } from '@/types'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+
+const SORT = 'sort'
 
 const options = [
   {
