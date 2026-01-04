@@ -37,7 +37,7 @@ const InputForm = ({ keyName, placeholder, register, errors }: TInputForm) => {
   )
 }
 
-const ShippingForm = () => {
+const PaymentForm = () => {
   const {
     register,
     handleSubmit,
@@ -115,4 +115,4 @@ const ShippingForm = () => {
   )
 }
 
-export default ShippingForm
+export default PaymentForm

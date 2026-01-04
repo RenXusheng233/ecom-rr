@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server'
 const TestPage = async () => {
   const { getToken } = await auth()
   const token = await getToken()
-  console.log(token)
+  console.log('token:', token)
 
   // Product
   const resProduct = await fetch('http://localhost:8000/test', {
