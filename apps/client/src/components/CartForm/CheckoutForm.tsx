@@ -1,8 +1,7 @@
 'use client'
 
 import { ShippingFormInputs } from '@/types'
-import { PaymentElement } from '@stripe/react-stripe-js'
-import { useCheckout } from '@stripe/react-stripe-js/checkout'
+import { useCheckout, PaymentElement } from '@stripe/react-stripe-js/checkout'
 import { ConfirmError } from '@stripe/stripe-js'
 import { useState } from 'react'
 
@@ -46,7 +45,7 @@ const CheckoutForm = ({ shippingForm }: CheckoutFormProps) => {
     <form>
       <PaymentElement options={{ layout: 'accordion' }} />
       <button disabled={loading} onClick={handleClick}>
-        Pay
+        {loading ? 'loading...' : 'Pay'}
       </button>
       {error && <div>{error.message}</div>}
     </form>

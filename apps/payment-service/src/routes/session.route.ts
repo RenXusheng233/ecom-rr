@@ -23,7 +23,7 @@ sessionRoute.post('/create-checkout-session', shouldBeUser, async (c) => {
       mode: 'payment',
       ui_mode: 'custom',
       // The URL of your payment completion page
-      return_url: `https://localhost:${PORT}/return?session_id={CHECKOUT_SESSION_ID}`,
+      return_url: `http://localhost:${PORT}/return?session_id={CHECKOUT_SESSION_ID}`,
     })
 
     return c.json({ checkoutSessionClientSecret: session.client_secret })

@@ -1,3 +1,4 @@
+// NOTE: use StripePaymentForm
 import { paymentFormSchema } from '@/schemas'
 import { PaymentFormInputs } from '@/types'
 import { zodResolver } from '@hookform/resolvers/zod'
