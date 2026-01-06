@@ -23,11 +23,10 @@ export const createStripeProduct = async ({
   }
 }
 
-// FIXME
-export const getStripeProductPrice = async (productId: string = '123') => {
+export const getStripeProductPrice = async (productId: number) => {
   try {
     const res = await stripe.prices.list({
-      product: productId,
+      product: productId.toString(),
     })
 
     return res.data[0]?.unit_amount

@@ -12,6 +12,25 @@ export enum FromPage {
 // NOTE: TEMPORARY
 const products: ProductType[] = [
   {
+    id: 123,
+    name: 'Test T-shirt',
+    shortDescription:
+      'Lorem ipsum dolor sit amet consect adipisicing elit lorem ipsum dolor sit.',
+    description:
+      'Lorem ipsum dolor sit amet consect adipisicing elit lorem ipsum dolor sit. Lorem ipsum dolor sit amet consect adipisicing elit lorem ipsum dolor sit. Lorem ipsum dolor sit amet consect adipisicing elit lorem ipsum dolor sit.',
+    price: 39,
+    sizes: ['s', 'm', 'l', 'xl', 'xxl'],
+    colors: ['gray', 'purple', 'green'],
+    images: {
+      gray: '/products/1g.png',
+      green: '/products/1gr.png',
+      purple: '/products/1p.png',
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    categorySlug: 'T-shirts',
+  },
+  {
     id: 1,
     name: 'Adidas CoreFit T-Shirt',
     shortDescription:
