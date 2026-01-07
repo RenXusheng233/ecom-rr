@@ -4,6 +4,7 @@ import { clerkMiddleware } from '@hono/clerk-auth'
 import { shouldBeUser } from './middleware/authMiddleware.js'
 import { cors } from 'hono/cors'
 import sessionRoute from './routes/session.route.js'
+import webhookRoute from './routes/webhooks.route.js'
 
 const app = new Hono()
 
@@ -44,6 +45,7 @@ app.get('/test', shouldBeUser, async (c) => {
 })
 
 app.route('/sessions', sessionRoute)
+app.route('/webhooks', webhookRoute)
 
 const start = async () => {
   try {
