@@ -1,5 +1,8 @@
 import { Request, Response } from 'express'
 import { prisma, Prisma } from '@repo/product-db'
+import { StripeProductType } from '@repo/types'
+import { producer } from '../utils/kafka'
+import { topics } from '@repo/kafka'
 
 export const createProduct = async (req: Request, res: Response) => {
   const data: Prisma.ProductCreateInput = req.body
@@ -21,6 +24,13 @@ export const createProduct = async (req: Request, res: Response) => {
   }
 
   const product = await prisma.product.create({ data })
+
+  const stripeProduct: StripeProductType = {
+    id: product.id.toString(),
+    name: product.name,
+    price: product.price,
+  }
+  producer.send(topics.product_created, { value: stripeProduct })
 
   res.status(201).json(product)
 }

@@ -1,7 +1,9 @@
-import { Kafka, Producer } from 'kafkajs'
+import { Kafka, Partitioners, Producer } from 'kafkajs'
 
 export const createProducer = (kafka: Kafka) => {
-  const producer: Producer = kafka.producer()
+  const producer: Producer = kafka.producer({
+    createPartitioner: Partitioners.LegacyPartitioner,
+  })
 
   const connect = async () => {
     await producer.connect()
