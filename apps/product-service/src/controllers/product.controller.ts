@@ -58,6 +58,8 @@ export const deleteProduct = async (req: Request, res: Response) => {
     },
   })
 
+  producer.send(topics.product_deleted, { value: Number(id) })
+
   res.status(200).json(deletedProduct)
 }
 

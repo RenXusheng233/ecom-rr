@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import Stripe from 'stripe'
 import stripe from '../utils/stripe'
+import { producer } from '../utils/kafka'
+import { topics } from '@repo/kafka'
 
 const webhookRoute = new Hono()
 
@@ -23,9 +25,27 @@ webhookRoute.post('/stripe', async (c) => {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session
       const lineItems = await stripe.checkout.sessions.listLineItems(session.id)
+      const shipping = session.collected_information?.shipping_details
+      let shipping_address = ''
+      if (shipping) {
+        const { address } = shipping
+        shipping_address = `${address.line1}, ${address.line2}, ${address.country}`
+      }
 
-      // TODO: CREATE ORDER
-      console.log(session, lineItems)
+      producer.send(topics.payment_successful, {
+        value: {
+          userId: session.client_reference_id,
+          email: session.customer_details?.email,
+          amount: session.amount_total,
+          status: session.payment_status === 'paid' ? 'success' : 'failed',
+          products: lineItems.data.map((item) => ({
+            name: item.description,
+            quantity: item.quantity,
+            price: item.price?.unit_amount,
+          })),
+          address: shipping_address,
+        },
+      })
       break
     }
 
