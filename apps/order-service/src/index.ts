@@ -4,6 +4,7 @@ import { shouldBeUser } from './middleware/authMiddleware'
 import { connectOrderDB } from '@repo/order-db'
 import { orderRoute } from './routes/order'
 import { consumer, producer } from './utils/kafka'
+import { runKafkaSubscriptions } from './utils/subscriptions'
 
 const fastify = Fastify()
 const port = 8001
@@ -45,6 +46,7 @@ const start = async () => {
     await connectOrderDB()
     await producer.connect()
     await consumer.connect()
+    await runKafkaSubscriptions()
     await fastify.listen({ port })
     console.log(`Order service is running on port ${port}`)
   } catch (error) {

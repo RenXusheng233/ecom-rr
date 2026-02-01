@@ -12,7 +12,7 @@ export const createConsumer = (kafka: Kafka, groupId: string) => {
   const subscribe = async (
     topics: {
       topicName: string
-      topicHandler: (message: object) => Promise<void>
+      topicHandler: (message: { value: unknown }) => Promise<void>
     }[],
   ) => {
     await consumer.subscribe({

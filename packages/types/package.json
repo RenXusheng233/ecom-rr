@@ -7,7 +7,8 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "@repo/product-db": "workspace:*"
+    "@repo/product-db": "workspace:*",
+    "@repo/order-db": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

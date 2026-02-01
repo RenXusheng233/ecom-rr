@@ -15,18 +15,22 @@
 - PORT: 8000
 - Framework: Express
 - Database: Postgres
+- Kafka
 
 ## Order Service
 
 - PORT: 8001
 - Framework: Fastify
 - Database: MongoDB
+- Kafka
 
 ## Payment Service
 
 - PORT: 8002
 - Framework: Hono
 - Payment: Stripe
+- webhooks: ngrok
+- Kafka
 
 ## Authentication
 

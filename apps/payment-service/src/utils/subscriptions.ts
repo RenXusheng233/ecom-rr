@@ -8,7 +8,7 @@ export const runKafkaSubscriptions = async () => {
     {
       topicName: topics.product_created,
       topicHandler: async (message) => {
-        const product = (message as { value: StripeProductType }).value
+        const product = message.value as StripeProductType
 
         console.log(`Receive message: ${topics.product_created}`, product)
 
@@ -18,7 +18,7 @@ export const runKafkaSubscriptions = async () => {
     {
       topicName: topics.product_deleted,
       topicHandler: async (message) => {
-        const productId = (message as { value: number }).value
+        const productId = message.value as number
 
         console.log(`Receive message: ${topics.product_deleted}`, productId)
 
