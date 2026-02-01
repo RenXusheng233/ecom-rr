@@ -21,46 +21,57 @@ type Category = {
   slug: string
 }
 
+enum CategorySlug {
+  ALL = 'All',
+  T_SHIRTS = 'T-shirts',
+  SHOES = 'Shoes',
+  ACCESSORIES = 'Accessories',
+  BAGS = 'Bags',
+  DRESSES = 'Dresses',
+  JACKETS = 'Jackets',
+  GLOVES = 'Gloves',
+}
+
 const categories: Category[] = [
   {
-    name: 'All',
+    name: CategorySlug.ALL,
     icon: <ShoppingBasket className="w-4 h-4" />,
-    slug: 'all',
+    slug: CategorySlug.ALL,
   },
   {
-    name: 'T-shirts',
+    name: CategorySlug.T_SHIRTS,
     icon: <Shirt className="w-4 h-4" />,
-    slug: 't-shirts',
+    slug: CategorySlug.T_SHIRTS,
   },
   {
-    name: 'Shoes',
+    name: CategorySlug.SHOES,
     icon: <Footprints className="w-4 h-4" />,
-    slug: 'shoes',
+    slug: CategorySlug.SHOES,
   },
   {
-    name: 'Accessories',
+    name: CategorySlug.ACCESSORIES,
     icon: <Glasses className="w-4 h-4" />,
-    slug: 'accessories',
+    slug: CategorySlug.ACCESSORIES,
   },
   {
-    name: 'Bags',
+    name: CategorySlug.BAGS,
     icon: <Briefcase className="w-4 h-4" />,
-    slug: 'bags',
+    slug: CategorySlug.BAGS,
   },
   {
-    name: 'Dresses',
+    name: CategorySlug.DRESSES,
     icon: <Venus className="w-4 h-4" />,
-    slug: 'dresses',
+    slug: CategorySlug.DRESSES,
   },
   {
-    name: 'Jackets',
+    name: CategorySlug.JACKETS,
     icon: <Shirt className="w-4 h-4" />,
-    slug: 'jackets',
+    slug: CategorySlug.JACKETS,
   },
   {
-    name: 'Gloves',
+    name: CategorySlug.GLOVES,
     icon: <Hand className="w-4 h-4" />,
-    slug: 'gloves',
+    slug: CategorySlug.GLOVES,
   },
 ]
 

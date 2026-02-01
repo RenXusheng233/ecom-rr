@@ -59,7 +59,7 @@ const ProductCard = ({ product }: { product: ProductType }) => {
       </Link>
       {/* PRODUCT DETAIL */}
       <div className="flex flex-col gap-4 p-4">
-        <h1 className="font-medium">{name}</h1>
+        <h1 className="font-medium truncate">{name}</h1>
         <p className="text-sm text-gray-500">{shortDescription}</p>
         {/* PRODUCT TYPES */}
         <div className="flex items-center gap-4 text-xs">

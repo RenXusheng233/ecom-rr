@@ -161,7 +161,9 @@ const CartPage = () => {
                           Color:&nbsp;{selectedColor}
                         </p>
                       </div>
-                      <p className="font-medium">${price.toFixed(2)}</p>
+                      <p className="font-medium">
+                        ${(price * quantity).toFixed(2)}
+                      </p>
                     </div>
                   </div>
                   {/* DELETE BUTTON */}
