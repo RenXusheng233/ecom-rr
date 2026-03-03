@@ -54,7 +54,7 @@ const start = async () => {
       console.log(`Product service is running on port ${port}`)
     })
   } catch (error) {
-    console.log(error)
+    console.error(error)
     process.exit(1)
   }
 }

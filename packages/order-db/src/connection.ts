@@ -14,7 +14,7 @@ export const connectOrderDB = async () => {
     isConnected = true
     console.log('Connected to mongoDB')
   } catch (error) {
-    console.log(error)
+    console.error(error)
     throw error
   }
 }

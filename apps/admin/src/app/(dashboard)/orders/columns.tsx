@@ -14,17 +14,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Checkbox } from '@/components/ui/checkbox'
 import Link from 'next/link'
+import { OrderType } from '@repo/types'
 
-export type Payment = {
-  id: string
-  amount: number
-  fullName: string
-  email: string
-  userId: string
-  status: 'pending' | 'success' | 'failed'
-}
-
-export const columns: ColumnDef<Payment>[] = [
+export const columns: ColumnDef<OrderType>[] = [
   {
     id: 'select',
     header: ({ table }) => (
@@ -46,8 +38,8 @@ export const columns: ColumnDef<Payment>[] = [
     ),
   },
   {
-    accessorKey: 'fullName',
-    header: 'User',
+    accessorKey: '_id',
+    header: 'ID',
   },
   {
     accessorKey: 'email',
@@ -71,7 +63,7 @@ export const columns: ColumnDef<Payment>[] = [
       const formatted = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
-      }).format(amount)
+      }).format(amount / 100)
 
       return <div className="font-medium">{formatted}</div>
     },
@@ -98,7 +90,7 @@ export const columns: ColumnDef<Payment>[] = [
   {
     id: 'actions',
     cell: ({ row }) => {
-      const payment = row.original
+      const order = row.original
 
       return (
         <DropdownMenu>
@@ -111,15 +103,15 @@ export const columns: ColumnDef<Payment>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(payment.id)}
+              onClick={() => navigator.clipboard.writeText(order._id)}
             >
-              Copy Payment ID
+              Copy Order ID
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <Link href={`/users/${payment.userId}`}>View Customer</Link>
+              <Link href={`/users/${order.userId}`}>View Customer</Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>View payment details</DropdownMenuItem>
+            <DropdownMenuItem>View Order Details</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )

@@ -2,6 +2,7 @@ import { columns, User } from './columns'
 import { DataTable } from './data-table'
 
 const getData = async (): Promise<User[]> => {
+  // TODO: Auth Service
   return [
     {
       id: '728ed521',

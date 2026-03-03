@@ -7,7 +7,7 @@ export const createOrder = async (order: OrderType) => {
   try {
     await newOrder.save()
   } catch (error) {
-    console.log(error)
+    console.error(error)
     throw error
   }
 }

@@ -37,7 +37,7 @@ sessionRoute.post('/create-checkout-session', shouldBeUser, async (c) => {
 
     return c.json({ checkoutSessionClientSecret: session.client_secret })
   } catch (error) {
-    console.log(error)
+    console.error(error)
     return c.json({ error })
   }
 })
@@ -54,7 +54,7 @@ sessionRoute.get('/:session_id', async (c) => {
       paymentStatus: session.payment_status,
     })
   } catch (error) {
-    console.log(error)
+    console.error(error)
     c.json({ error })
   }
 })

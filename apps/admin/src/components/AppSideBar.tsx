@@ -202,7 +202,7 @@ const renderUsersGroup = () => (
 
 const renderOrdersGroup = () => (
   <SidebarGroup>
-    <SidebarGroupLabel>Orders / Payments</SidebarGroupLabel>
+    <SidebarGroupLabel>Orders</SidebarGroupLabel>
     <SidebarGroupAction>
       <Plus /> <span className="sr-only">Add Order</span>
     </SidebarGroupAction>
@@ -210,9 +210,9 @@ const renderOrdersGroup = () => (
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
-            <Link href="/payments">
+            <Link href="/orders">
               <ShoppingBasket />
-              See All Transactions
+              See All Orders
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

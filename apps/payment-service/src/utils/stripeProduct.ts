@@ -18,7 +18,7 @@ export const createStripeProduct = async ({
 
     return res
   } catch (error) {
-    console.log(error)
+    console.error(error)
     return error
   }
 }
@@ -31,7 +31,7 @@ export const getStripeProductPrice = async (productId: number) => {
 
     return res.data[0]?.unit_amount
   } catch (error) {
-    console.log(error)
+    console.error(error)
     return error
   }
 }
@@ -42,7 +42,7 @@ export const deleteStripeProduct = async (productId: number) => {
 
     return res
   } catch (error) {
-    console.log(error)
+    console.error(error)
     return error
   }
 }

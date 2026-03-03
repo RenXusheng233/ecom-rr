@@ -36,7 +36,7 @@ app.get('/test', shouldBeUser, async (c) => {
       user,
     })
   } catch (error) {
-    console.log(error)
+    console.error(error)
     return c.json(
       {
         message: 'Failed to retrieve user from payment service',
