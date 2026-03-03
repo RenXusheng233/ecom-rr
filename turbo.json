@@ -1,5 +1,5 @@
 {
-  "$schema": "https://v2-8-1.turborepo.dev/schema.json",
+  "$schema": "https://v2-8-12.turborepo.dev/schema.json",
   "ui": "stream",
   "tasks": {
     "build": {
@@ -16,8 +16,9 @@
         "!.next/cache/**"
       ],
       "env": [
-        "DATABASE_URL",
+        "PORT",
         "NODE_ENV",
+        "DATABASE_URL",
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRECT"
       ]

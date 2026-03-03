@@ -32,6 +32,14 @@
 - webhooks: ngrok
 - Kafka
 
+## Auth Service
+
+- PORT: 8003
+- Framework: NestJS
+- Database: Postgres?
+- GraphQL?
+- Kafka
+
 ## Authentication
 
 - clerk
