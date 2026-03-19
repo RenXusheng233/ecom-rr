@@ -21,6 +21,10 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@repo/kafka": "workspace:*",
+    "@clerk/express": "^1.7.57",
+    "cors": "^2.8.5",
+    "@nestjs/mapped-types": "*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
@@ -30,6 +34,7 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@types/cors": "^2.8.19",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
