@@ -15,14 +15,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import Link from 'next/link'
 import Image from 'next/image'
-
-export type User = {
-  id: string
-  avatar: string
-  fullName: string
-  email: string
-  status: 'active' | 'inactive'
-}
+import { User } from '@clerk/nextjs/server'
 
 export const columns: ColumnDef<User>[] = [
   {
@@ -54,8 +47,8 @@ export const columns: ColumnDef<User>[] = [
       return (
         <div className="w-9 h-9 relative">
           <Image
-            src={user.avatar}
-            alt={user.fullName}
+            src={user.imageUrl}
+            alt={user.firstName || user.username || '-'}
             fill
             sizes="auto"
             loading="eager"
@@ -66,8 +59,12 @@ export const columns: ColumnDef<User>[] = [
     },
   },
   {
-    accessorKey: 'fullName',
+    accessorKey: 'firstName',
     header: 'User',
+    cell: ({ row }) => {
+      const user = row.original
+      return <div>{user.firstName || user.username || '-'}</div>
+    },
   },
   {
     accessorKey: 'email',
@@ -82,18 +79,24 @@ export const columns: ColumnDef<User>[] = [
         </Button>
       )
     },
+    cell: ({ row }) => {
+      const user = row.original
+      return <div>{user.emailAddresses[0]?.emailAddress}</div>
+    },
   },
   {
     accessorKey: 'status',
     header: 'Status',
     cell: ({ row }) => {
-      const status: string = row.getValue('status')
+      const user = row.original
+      const status = user.banned ? 'banned' : 'active'
+
       return (
         <div
           className={cn(
             `p-1 rounded-md w-max text-xs`,
             status === 'active' && 'bg-green-500/40',
-            status === 'inactive' && 'bg-red-500/40',
+            status === 'banned' && 'bg-red-500/40',
           )}
         >
           {status}

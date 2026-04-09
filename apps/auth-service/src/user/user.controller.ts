@@ -1,42 +1,40 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
 } from '@nestjs/common'
 import { UserService } from './user.service'
-import { CreateUserDto } from './dto/create-user.dto'
-import { UpdateUserDto } from './dto/update-user.dto'
+import { ShouldBeAdminGuard } from '../guards/should-be-admin.guard'
+import { clerkClient } from '@clerk/express'
 
-@Controller('user')
+@Controller('users')
+@UseGuards(ShouldBeAdminGuard)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.userService.create(createUserDto)
-  }
-
   @Get()
-  findAll() {
-    return this.userService.findAll()
+  getUsers(): Promise<unknown> {
+    return this.userService.getUsers()
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.userService.findOne(+id)
+  getUser(@Param('id') id: string): Promise<unknown> {
+    return this.userService.getUser(id)
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.userService.update(+id, updateUserDto)
+  @Post()
+  createUser(
+    @Body() newUser: Parameters<typeof clerkClient.users.createUser>[0],
+  ): Promise<unknown> {
+    return this.userService.createUser(newUser)
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.userService.remove(+id)
+  async deleteUser(@Param('id') id: string): Promise<unknown> {
+    return this.userService.deleteUser(id)
   }
 }

@@ -20,7 +20,8 @@
         "NODE_ENV",
         "DATABASE_URL",
         "STRIPE_SECRET_KEY",
-        "STRIPE_WEBHOOK_SECRECT"
+        "STRIPE_WEBHOOK_SECRECT",
+        "CLERK_SECRET_KEY"
       ]
     },
     "lint": {

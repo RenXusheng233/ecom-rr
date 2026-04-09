@@ -9,16 +9,14 @@ import { consumer, producer } from './utils/kafka.js'
 const app = express()
 const port = 8000
 
-app.use(clerkMiddleware())
-app.use(express.json())
-
-// FIXME: ineffective?
 app.use(
   cors({
     origin: ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true,
   }),
 )
+app.use(clerkMiddleware())
+app.use(express.json())
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
