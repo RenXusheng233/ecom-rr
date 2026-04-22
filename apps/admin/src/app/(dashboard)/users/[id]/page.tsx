@@ -17,9 +17,56 @@ import {
 } from '@/components/ui/hover-card'
 import { Progress } from '@/components/ui/progress'
 import { Sheet, SheetTrigger } from '@/components/ui/sheet'
+import { auth, User } from '@clerk/nextjs/server'
 import { BadgeCheck, Candy, Citrus, Shield } from 'lucide-react'
 
-const SingleUserPage = () => {
+const getData = async (id: string): Promise<User | null> => {
+  const { getToken } = await auth()
+  const token = await getToken()
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_AUTH_SERVICE_URL}/users/${id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    )
+    const data = await res.json()
+    return data
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    return null
+  }
+}
+
+const SingleUserPage = async ({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) => {
+  const { id } = await params
+  const user = await getData(id)
+  const {
+    firstName,
+    lastName,
+    username,
+    imageUrl,
+    emailAddresses,
+    phoneNumbers,
+    publicMetadata,
+    banned,
+    createdAt,
+  } = user || {}
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <p className="text-muted-foreground">User not found.</p>
+      </div>
+    )
+  }
+
   const renderBreadcrumb = () => (
     <Breadcrumb>
       <BreadcrumbList>
@@ -32,7 +79,9 @@ const SingleUserPage = () => {
         </BreadcrumbItem>
         <BreadcrumbSeparator />
         <BreadcrumbItem>
-          <BreadcrumbPage>Richard Ren</BreadcrumbPage>
+          <BreadcrumbPage>
+            {`${firstName}` + ' ' + `${lastName}` || `${username}` || '-'}
+          </BreadcrumbPage>
         </BreadcrumbItem>
       </BreadcrumbList>
     </Breadcrumb>
@@ -120,26 +169,29 @@ const SingleUserPage = () => {
         </div>
         <div className="flex items-center gap-2">
           <span className="font-bold">Fullname:</span>
-          <span>Richard Ren</span>
+          <span>
+            {`${firstName}` + ' ' + `${lastName}` || `${username}` || '-'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-bold">Email:</span>
-          <span>RichardRen@gmail.com</span>
+          <span>{emailAddresses?.[0]?.emailAddress || '-'}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="font-bold">Phone:</span>
-          <span>18888887777</span>
+          <span>{phoneNumbers?.[0]?.phoneNumber || '-'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-bold">Address:</span>
-          <span>169 Main St</span>
+          <span className="font-bold">Role:</span>
+          <span>{String(publicMetadata?.role) || 'user'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-bold">City:</span>
-          <span>Yan Tai</span>
+          <span className="font-bold">Status:</span>
+          <span>{banned ? 'Banned' : 'Active'}</span>
         </div>
         <p className="text-sm text-muted-foreground mt-4">
-          Joined on 2025.11.25
+          Joined on{' '}
+          {createdAt ? new Date(createdAt).toLocaleDateString('zh-CN') : '-'}
         </p>
       </div>
     </div>
@@ -149,10 +201,12 @@ const SingleUserPage = () => {
     <div className="bg-primary-foreground p-4 rounded-lg space-y-2">
       <div className="flex items-center gap-2">
         <Avatar className="size-12">
-          <AvatarImage src="https://avatars.githubusercontent.com/u/38835011" />
-          <AvatarFallback>RR</AvatarFallback>
+          <AvatarImage src={imageUrl || ''} />
+          <AvatarFallback>{`${firstName?.[0] || ''}${lastName?.[0] || '-'}`}</AvatarFallback>
         </Avatar>
-        <h1 className="text-xl font-semibold">Richard Ren</h1>
+        <h1 className="text-xl font-semibold">
+          {`${firstName}` + ' ' + `${lastName}` || `${username}` || '-'}
+        </h1>
       </div>
       <p className="text-sm text-muted-foreground">
         We will cross that bridge when we come to it.
