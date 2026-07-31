@@ -4,11 +4,18 @@ import { clerkClient } from '../utils/clerk'
 @Injectable()
 export class UserService {
   async getUsers(): Promise<unknown> {
-    return clerkClient.users.getUserList()
+    const users = await clerkClient.users.getUserList()
+    return users
   }
 
   async getUser(id: string): Promise<unknown> {
-    return clerkClient.users.getUser(id)
+    try {
+      const user = await clerkClient.users.getUser(id)
+      return user
+    } catch (error) {
+      console.error('Error fetching user:', error)
+      return null
+    }
   }
 
   async createUser(
@@ -19,7 +26,12 @@ export class UserService {
   }
 
   async deleteUser(id: string): Promise<unknown> {
-    const user = await clerkClient.users.deleteUser(id)
-    return user
+    try {
+      const user = await clerkClient.users.deleteUser(id)
+      return user
+    } catch (error) {
+      console.error('Error deleting user:', error)
+      return null
+    }
   }
 }

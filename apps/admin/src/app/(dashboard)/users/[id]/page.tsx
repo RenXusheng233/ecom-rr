@@ -32,8 +32,11 @@ const getData = async (id: string): Promise<User | null> => {
         },
       },
     )
-    const data = await res.json()
-    return data
+
+    if (!res.ok) return null
+
+    const text = await res.text()
+    return text ? JSON.parse(text) : null
   } catch (error) {
     console.error('Error fetching users:', error)
     return null
@@ -47,6 +50,15 @@ const SingleUserPage = async ({
 }) => {
   const { id } = await params
   const user = await getData(id)
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <p className="text-muted-foreground">User not found.</p>
+      </div>
+    )
+  }
+
   const {
     firstName,
     lastName,
@@ -57,15 +69,7 @@ const SingleUserPage = async ({
     publicMetadata,
     banned,
     createdAt,
-  } = user || {}
-
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">User not found.</p>
-      </div>
-    )
-  }
+  } = user
 
   const renderBreadcrumb = () => (
     <Breadcrumb>
