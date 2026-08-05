@@ -7,8 +7,9 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@repo/order-db": "workspace:*",
     "@repo/product-db": "workspace:*",
-    "@repo/order-db": "workspace:*"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
