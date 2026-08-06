@@ -20,7 +20,6 @@ import {
 } from './ui/form'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
-import { CATEGORIES, COLORS, SIZES } from '@/lib/consts'
 import { Textarea } from './ui/textarea'
 import {
   Select,
@@ -31,30 +30,70 @@ import {
 } from './ui/select'
 import { Checkbox } from './ui/checkbox'
 import { ScrollArea } from './ui/scroll-area'
+import { ProductFormSchema, COLORS, SIZES, CategoryType } from '@repo/types'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { toast } from 'react-toastify'
+import { useAuth } from '@clerk/nextjs'
 
-const formSchema = z.object({
-  name: z.string().min(1, 'Product name is required!'),
-  shortDescription: z.string().min(1, 'Short description is required!').max(60),
-  description: z.string().min(1, 'Description is required!'),
-  price: z.number().min(1, 'Price is required!'),
-  category: z.enum(CATEGORIES),
-  colors: z.array(z.enum(COLORS)),
-  sizes: z.array(z.enum(SIZES)),
-  images: z.record(z.enum(COLORS), z.string().min(1, 'Image is required!')),
-})
+const fetchCategories = async () => {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/categories`,
+  )
+  if (!res.ok) {
+    throw new Error('Failed to fetch categories')
+  }
+  return await res.json()
+}
 
 const AddProduct = () => {
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<z.infer<typeof ProductFormSchema>>({
+    resolver: zodResolver(ProductFormSchema),
     defaultValues: {
       name: '',
       shortDescription: '',
       description: '',
       price: 0,
+      categorySlug: '',
+      colors: [],
+      sizes: [],
+      images: {},
     },
   })
 
   const { control } = form
+
+  const { data: categoryData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  })
+
+  const { getToken } = useAuth()
+  const mutation = useMutation({
+    mutationFn: async (data: z.infer<typeof ProductFormSchema>) => {
+      const token = await getToken()
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(data),
+        },
+      )
+
+      if (!res.ok) {
+        throw new Error('Failed to add product')
+      }
+    },
+    onSuccess: () => {
+      toast.success('Product added successfully!')
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to add product')
+    },
+  })
 
   const renderFormInputField = (
     name: 'name' | 'shortDescription' | 'description' | 'price',
@@ -70,7 +109,7 @@ const AddProduct = () => {
             {name === 'description' ? (
               <Textarea {...field} />
             ) : (
-              <Input type={name === 'price' ? 'number' : 'text'} {...field} />
+              <Input type="text" {...field} />
             )}
           </FormControl>
           <FormDescription>{description}</FormDescription>
@@ -87,7 +126,10 @@ const AddProduct = () => {
           <SheetTitle className="mb-4">Add Product</SheetTitle>
           <SheetDescription asChild>
             <Form {...form}>
-              <form className="space-y-8">
+              <form
+                className="space-y-8"
+                onSubmit={form.handleSubmit((data) => mutation.mutate(data))}
+              >
                 {renderFormInputField('name', 'Enter the name of the product.')}
                 {renderFormInputField(
                   'shortDescription',
@@ -97,37 +139,60 @@ const AddProduct = () => {
                   'description',
                   'Enter the description of the product.',
                 )}
-                {renderFormInputField(
-                  'price',
-                  'Enter the price of the product.',
-                )}
                 <FormField
                   control={control}
-                  name="category"
+                  name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Category</FormLabel>
+                      <FormLabel>Price</FormLabel>
                       <FormControl>
-                        <Select {...field}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CATEGORIES.map((cat) => (
-                              <SelectItem key={cat} value={cat}>
-                                {cat}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Input
+                          type="number"
+                          {...field}
+                          onChange={(e) =>
+                            field.onChange(Number(e.target.value))
+                          }
+                        />
                       </FormControl>
                       <FormDescription>
-                        Select the category of the product.
+                        Enter the price of the product in USD.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+                {categoryData && (
+                  <FormField
+                    control={control}
+                    name="categorySlug"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <FormControl>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {categoryData?.map((cat: CategoryType) => (
+                                <SelectItem key={cat.id} value={cat.slug}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormDescription>
+                          Select the category of the product.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={control}
                   name="sizes"
@@ -207,28 +272,6 @@ const AddProduct = () => {
                               </div>
                             ))}
                           </div>
-                          {field.value && field.value.length > 0 && (
-                            <div className="mt-8 space-y-4">
-                              <p className="text-sm font-medium">
-                                Upload images for selected colors:
-                              </p>
-                              {field.value.map((color) => (
-                                <div
-                                  key={color}
-                                  className="flex items-center gap-2"
-                                >
-                                  <div
-                                    className="w-2 h-2 rounded-full"
-                                    style={{ backgroundColor: color }}
-                                  />
-                                  <span className="text-sm min-w-[60px]">
-                                    {color}
-                                  </span>
-                                  <Input type="file" accept="images/*" />
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       </FormControl>
                       <FormDescription>
@@ -238,7 +281,89 @@ const AddProduct = () => {
                     </FormItem>
                   )}
                 />
-                <Button type="submit">Submit</Button>
+                <FormField
+                  control={control}
+                  name="images"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Images</FormLabel>
+                      <FormControl>
+                        <div>
+                          {form.watch('colors')?.map((color) => (
+                            <div
+                              key={color}
+                              className="mb-4 flex items-center gap-4"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span className="text-sm font-medium min-w-[60px]">
+                                  {color}:
+                                </span>
+                              </div>
+                              <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (file) {
+                                    try {
+                                      const formData = new FormData()
+                                      formData.append('file', file)
+                                      formData.append(
+                                        'upload_preset',
+                                        'ecom-rr',
+                                      )
+
+                                      const res = await fetch(
+                                        `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`,
+                                        {
+                                          method: 'POST',
+                                          body: formData,
+                                        },
+                                      )
+
+                                      const data = await res.json()
+                                      if (data.secure_url) {
+                                        const currImages =
+                                          form.getValues('images') || {}
+                                        form.setValue('images', {
+                                          ...currImages,
+                                          [color]: data.secure_url,
+                                        })
+                                      }
+                                    } catch (error) {
+                                      console.log(error)
+                                      toast.error('Failed to upload image')
+                                    }
+                                  }
+                                }}
+                              />
+                              {field.value?.[color] ? (
+                                <span className="text-green-600 text-sm">
+                                  Uploaded
+                                </span>
+                              ) : (
+                                <span className="text-red-600 text-sm">
+                                  Required
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  disabled={mutation.isPending}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {mutation.isPending ? 'Submitting...' : 'Submit'}
+                </Button>
               </form>
             </Form>
           </SheetDescription>
