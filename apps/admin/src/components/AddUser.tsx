@@ -20,37 +20,54 @@ import {
 } from './ui/form'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
-
-const formSchema = z.object({
-  fullName: z
-    .string()
-    .min(2, 'Username must be at least 2 characters!')
-    .max(50, 'Username must be less than 50 characters!'),
-  email: z.email('Invalid email!').min(1),
-  phone: z
-    .string()
-    .length(11, 'Phone number must be 11 digits')
-    .regex(/^\d+$/, 'Phone number must contain only numbers!'),
-  address: z.string().min(1, 'Location is required!'),
-  city: z.string().min(1, 'City is required!'),
-})
+import { useAuth } from '@clerk/nextjs'
+import { toast } from 'react-toastify'
+import { useMutation } from '@tanstack/react-query'
+import { UserFormSchema } from '@repo/types'
 
 const AddUser = () => {
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<z.infer<typeof UserFormSchema>>({
+    resolver: zodResolver(UserFormSchema),
     defaultValues: {
-      fullName: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
+      firstName: '',
+      lastName: '',
+      username: '',
+      emailAddress: [''],
+      password: '',
     },
   })
 
   const { control } = form
 
+  const { getToken } = useAuth()
+  const mutation = useMutation({
+    mutationFn: async (data: z.infer<typeof UserFormSchema>) => {
+      const token = await getToken()
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_AUTH_SERVICE_URL}/users`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          method: 'POST',
+          body: JSON.stringify(data),
+        },
+      )
+      if (!res.ok) {
+        throw new Error('Failed to create user')
+      }
+    },
+    onSuccess: () => {
+      toast.success('User created successfully')
+    },
+    onError: (error) => {
+      toast.error(`Error: ${error.message}`)
+    },
+  })
+
   const renderFormInputField = (
-    name: 'fullName' | 'email' | 'phone' | 'address' | 'city',
+    name: 'firstName' | 'lastName' | 'username' | 'password',
     description: string,
   ) => (
     <FormField
@@ -60,7 +77,10 @@ const AddUser = () => {
         <FormItem>
           <FormLabel>{name.charAt(0).toUpperCase() + name.slice(1)}</FormLabel>
           <FormControl>
-            <Input type={name === 'email' ? 'email' : 'text'} {...field} />
+            <Input
+              type={name === 'password' ? 'password' : 'text'}
+              {...field}
+            />
           </FormControl>
           <FormDescription>{description}</FormDescription>
           <FormMessage />
@@ -75,16 +95,56 @@ const AddUser = () => {
         <SheetTitle className="mb-4">Add User</SheetTitle>
         <SheetDescription asChild>
           <Form {...form}>
-            <form className="space-y-8">
-              {renderFormInputField('fullName', 'Enter user full name.')}
-              {renderFormInputField('email', 'Only admin can see your email.')}
-              {renderFormInputField(
-                'phone',
-                'Only admin can see your phone number (optional).',
-              )}
-              {renderFormInputField('address', 'Enter your adress (optional).')}
-              {renderFormInputField('city', 'Enter your city (optional).')}
-              <Button type="submit">Submit</Button>
+            <form
+              className="space-y-8"
+              onSubmit={form.handleSubmit((data) => mutation.mutate(data))}
+            >
+              {renderFormInputField('firstName', 'Enter user first name.')}
+              {renderFormInputField('lastName', 'Enter user last name.')}
+              {renderFormInputField('username', 'Enter username.')}
+              <FormField
+                control={control}
+                name="emailAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email Address</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="email1@gmail.com, email2@gmail.com"
+                        value={field.value ? field.value.join(', ') : ''}
+                        onChange={(e) => {
+                          const emails = e.target.value
+                            .split(',')
+                            .map((email) => email.trim())
+                          field.onChange(emails)
+                        }}
+                        onBlur={() => {
+                          if (Array.isArray(field.value)) {
+                            const cleaned = field.value
+                              .map((e) => e.trim())
+                              .filter(Boolean)
+                            field.onChange(cleaned)
+                          }
+                          field.onBlur()
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Only admin can see your email.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {renderFormInputField('password', 'Enter user password.')}
+              <Button
+                type="submit"
+                disabled={mutation.isPending}
+                className="disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {mutation.isPending ? 'Submitting...' : 'Submit'}
+              </Button>
             </form>
           </Form>
         </SheetDescription>

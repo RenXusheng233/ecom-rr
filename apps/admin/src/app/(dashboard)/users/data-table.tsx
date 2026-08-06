@@ -22,6 +22,11 @@ import {
 import { DataTablePagination } from '@/components/TablePagination'
 import { Button } from '@/components/ui/button'
 import { Trash2 } from 'lucide-react'
+import { useAuth } from '@clerk/nextjs'
+import { useMutation } from '@tanstack/react-query'
+import { User } from '@clerk/nextjs/server'
+import { toast } from 'react-toastify'
+import { useRouter } from 'next/navigation'
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -49,6 +54,37 @@ export function DataTable<TData, TValue>({
     },
   })
 
+  const { getToken } = useAuth()
+  const router = useRouter()
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const token = await getToken()
+      const selectedRows = table.getSelectedRowModel().rows
+      await Promise.all(
+        selectedRows.map(async (row) => {
+          const userId = (row.original as User).id
+          await fetch(
+            `${process.env.NEXT_PUBLIC_AUTH_SERVICE_URL}/users/${userId}`,
+            {
+              method: 'DELETE',
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          )
+        }),
+      )
+    },
+    onSuccess: () => {
+      toast.success('User(s) deleted successfully')
+      router.refresh()
+      // FIXME: 删除成功后, rowSelection 没有清空, 需要手动清空
+    },
+    onError: (error) => {
+      toast.error(`Error: ${error.message}`)
+    },
+  })
+
   return (
     <div className="overflow-hidden rounded-md border">
       {Object.keys(rowSelection).length > 0 && (
@@ -56,9 +92,11 @@ export function DataTable<TData, TValue>({
           <Button
             size="sm"
             className="bg-red-500 text-white m-2 cursor-pointer hover:bg-red-600"
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate()}
           >
             <Trash2 />
-            Delete User(s)
+            {mutation.isPending ? 'Deleting...' : 'Delete User(s)'}
           </Button>
         </div>
       )}
