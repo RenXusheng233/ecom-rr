@@ -11,9 +11,7 @@ import {
   Venus,
 } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-
-export const ALL = 'all'
-export const CATEGORY = 'category'
+import { ALL, CATEGORY } from './category'
 
 type Category = {
   name: string
@@ -22,7 +20,7 @@ type Category = {
 }
 
 enum CategorySlug {
-  ALL = 'All',
+  ALL = 'all',
   T_SHIRTS = 'T-shirts',
   SHOES = 'Shoes',
   ACCESSORIES = 'Accessories',

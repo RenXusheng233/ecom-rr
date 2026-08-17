@@ -1,8 +1,9 @@
 import { ProductType } from '@repo/types'
 import Link from 'next/link'
-import Categories, { CATEGORY } from './Categories'
+import Categories from './Categories'
 import ProductCard from './ProductCard'
 import Filter from './Filter'
+import { CATEGORY, getCategoryQueryParam, isAllCategory } from './category'
 
 const HOME_PAGE_PRODUCTS_LIMIT = 8
 
@@ -161,7 +162,7 @@ const fetchProducts = async ({
   from,
 }: ProductsParams) => {
   const sortParam = `sort=${sort || 'newest'}`
-  const categoryParam = category ? `&category=${category}` : ''
+  const categoryParam = getCategoryQueryParam(category)
   const searchParam = search ? `&search=${search}` : ''
   const fromParam =
     from === FromPage.Home ? `&limit=${HOME_PAGE_PRODUCTS_LIMIT}` : ''
@@ -194,7 +195,11 @@ const ProductList = async ({
       </div>
       {from === FromPage.Home && (
         <Link
-          href={category ? `/products?${CATEGORY}=${category}` : '/products'}
+          href={
+            category && !isAllCategory(category)
+              ? `/products?${CATEGORY}=${encodeURIComponent(category)}`
+              : '/products'
+          }
           className="flex justify-end mt-4 underline text-sm text-gray-500"
         >
           View all products
