@@ -12,7 +12,8 @@ export const createConsumer = (kafka: Kafka, groupId: string) => {
   const subscribe = async (
     topics: {
       topicName: string
-      topicHandler: (message: { value: unknown }) => Promise<void>
+      topicHandler: (message: unknown) => Promise<void>
+      errorPolicy?: 'retry' | 'skip'
     }[],
   ) => {
     await consumer.subscribe({
@@ -22,16 +23,21 @@ export const createConsumer = (kafka: Kafka, groupId: string) => {
 
     await consumer.run({
       eachMessage: async ({ topic, message }) => {
+        const topicConfig = topics.find(
+          (candidate) => candidate.topicName === topic,
+        )
         try {
-          const topicConfig = topics.find((t) => t.topicName === topic)
           if (topicConfig) {
             const value = message.value?.toString()
 
             if (value) {
-              await topicConfig.topicHandler(JSON.parse(value))
+              await topicConfig.topicHandler(JSON.parse(value) as unknown)
             }
           }
         } catch (error) {
+          if (topicConfig?.errorPolicy === 'retry') {
+            throw error
+          }
           console.log('Error processing message: ', error)
         }
       },

@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model CatalogInboxEvent {
+  id         String   @id
+  productId  String
+  receivedAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model StripeCatalogItem {
+  productId         String            @id
+  desiredEventId    String
+  desiredVersion    Int
+  desiredOperation  CatalogOperation
+  desiredName       String?
+  desiredUnitAmount Int?
+  desiredCurrency   String?
+  desiredRunId      String
+  appliedVersion    Int?
+  stripeProductId   String?
+  stripePriceId     String?
+  status            CatalogTaskStatus @default(PENDING)
+  attempts          Int               @default(0)
+  nextAttemptAt     DateTime          @default(now())
+  leaseUntil        DateTime?
+  claimToken        String?
+  processingVersion Int?
+  resultRevision    Int               @default(0)
+  mutationEpoch     Int               @default(0)
+  lastError         String?
+  syncedAt          DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([status, nextAttemptAt])
+}
+
+model PaymentOutboxEvent {
+  id               String       @id @default(uuid())
+  aggregateId      String
+  aggregateVersion Int
+  payload          Json
+  status           OutboxStatus @default(PENDING)
+  attempts         Int          @default(0)
+  nextAttemptAt    DateTime     @default(now())
+  leaseUntil       DateTime?
+  claimToken       String?
+  publishedAt      DateTime?
+  lastError        String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([status, nextAttemptAt])
+}
+
+enum CatalogOperation {
+  UPSERT
+  ARCHIVE
+}
+
+enum CatalogTaskStatus {
+  PENDING
+  PROCESSING
+  SYNCED
+  FAILED
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+}

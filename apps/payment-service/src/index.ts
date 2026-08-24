@@ -7,6 +7,11 @@ import sessionRoute from './routes/session.route.js'
 import webhookRoute from './routes/webhooks.route.js'
 import { consumer, producer } from './utils/kafka.js'
 import { runKafkaSubscriptions } from './utils/subscriptions.js'
+import { paymentPrisma } from '@repo/payment-db'
+import catalogRoute from './routes/catalog.route.js'
+import { startCatalogSyncWorker } from './utils/catalogWorker.js'
+import { startPaymentOutboxWorker } from './utils/paymentOutboxWorker.js'
+import { startCatalogReconciliation } from './utils/catalogReconciliation.js'
 
 const app = new Hono()
 
@@ -48,12 +53,17 @@ app.get('/test', shouldBeUser, async (c) => {
 
 app.route('/sessions', sessionRoute)
 app.route('/webhooks', webhookRoute)
+app.route('/catalog-sync', catalogRoute)
 
 const start = async () => {
   try {
+    await paymentPrisma.$connect()
     await producer.connect()
     await consumer.connect()
     await runKafkaSubscriptions()
+    startCatalogSyncWorker()
+    startPaymentOutboxWorker()
+    startCatalogReconciliation()
     serve(
       {
         fetch: app.fetch,

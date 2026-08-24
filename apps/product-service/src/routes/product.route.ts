@@ -2,6 +2,7 @@ import { Router } from 'express'
 import {
   createProduct,
   deleteProduct,
+  getAdminProducts,
   getProduct,
   getProducts,
   updateProduct,
@@ -13,6 +14,7 @@ const router: Router = Router()
 router.post('/', shouldBeAdmin, createProduct)
 router.put('/:id', shouldBeAdmin, updateProduct)
 router.delete('/:id', shouldBeAdmin, deleteProduct)
+router.get('/admin', shouldBeAdmin, getAdminProducts)
 router.get('/', getProducts)
 router.get('/:id', getProduct)
 

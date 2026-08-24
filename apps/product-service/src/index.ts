@@ -5,6 +5,8 @@ import { shouldBeUser } from './middleware/authMiddleware.js'
 import productRouter from './routes/product.route.js'
 import categoryRouter from './routes/category.route.js'
 import { consumer, producer } from './utils/kafka.js'
+import { startProductOutboxWorker } from './utils/productOutboxWorker.js'
+import { runKafkaSubscriptions } from './utils/subscriptions.js'
 
 const app = express()
 const port = 8000
@@ -48,6 +50,8 @@ const start = async () => {
   try {
     await producer.connect()
     await consumer.connect()
+    await runKafkaSubscriptions()
+    startProductOutboxWorker()
     app.listen(port, () => {
       console.log(`Product service is running on port ${port}`)
     })

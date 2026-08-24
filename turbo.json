@@ -3,53 +3,43 @@
   "ui": "stream",
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build",
-        "^db:generate"
-      ],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        ".env*"
-      ],
-      "outputs": [
-        ".next/**",
-        "!.next/cache/**"
-      ],
+      "dependsOn": ["^build", "^db:generate"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**"],
       "env": [
         "PORT",
         "NODE_ENV",
         "DATABASE_URL",
+        "PAYMENT_DATABASE_URL",
+        "CATALOG_SYNC_ENFORCEMENT",
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRECT",
         "CLERK_SECRET_KEY"
       ]
     },
     "lint": {
-      "dependsOn": [
-        "^lint"
-      ]
+      "dependsOn": ["^lint"]
     },
     "check-types": {
-      "dependsOn": [
-        "^check-types"
-      ]
+      "dependsOn": ["^check-types"]
     },
     "dev": {
-      "dependsOn": [
-        "^db:generate"
-      ],
+      "dependsOn": ["^db:generate"],
       "cache": false,
       "persistent": true
     },
     "db:generate": {
-      "cache": false
+      "cache": false,
+      "env": ["DATABASE_URL", "PAYMENT_DATABASE_URL"]
     },
     "db:migrate": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": ["DATABASE_URL", "PAYMENT_DATABASE_URL"]
     },
     "db:deploy": {
-      "cache": false
+      "cache": false,
+      "env": ["DATABASE_URL", "PAYMENT_DATABASE_URL"]
     }
   }
 }

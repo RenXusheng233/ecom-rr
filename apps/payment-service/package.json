@@ -5,10 +5,12 @@
     "dev": "tsx --env-file=.env --watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@repo/kafka": "workspace:*",
+    "@repo/payment-db": "workspace:*",
     "@hono/clerk-auth": "^3.0.3",
     "@hono/node-server": "^1.19.6",
     "hono": "^4.10.7",

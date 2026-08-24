@@ -378,6 +378,9 @@ importers:
       '@repo/kafka':
         specifier: workspace:*
         version: link:../../packages/kafka
+      '@repo/payment-db':
+        specifier: workspace:*
+        version: link:../../packages/payment-db
       hono:
         specifier: ^4.10.7
         version: 4.10.7
@@ -437,6 +440,9 @@ importers:
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
 
   packages/eslint-config:
     devDependencies:
@@ -489,6 +495,9 @@ importers:
       '@types/node':
         specifier: ^25.0.3
         version: 25.0.3
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
 
   packages/order-db:
     dependencies:
@@ -505,6 +514,37 @@ importers:
       '@types/node':
         specifier: ^25.0.3
         version: 25.0.3
+
+  packages/payment-db:
+    dependencies:
+      '@prisma/adapter-pg':
+        specifier: ^7.4.0
+        version: 7.4.0
+      '@prisma/client':
+        specifier: ^7.4.0
+        version: 7.4.0(prisma@7.4.0(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3))(typescript@5.9.3)
+      pg:
+        specifier: ^8.16.3
+        version: 8.16.3
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/pg':
+        specifier: ^8.16.0
+        version: 8.16.0
+      dotenv:
+        specifier: ^17.2.3
+        version: 17.2.3
+      prisma:
+        specifier: ^7.4.0
+        version: 7.4.0(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
 
   packages/product-db:
     dependencies:
