@@ -32,23 +32,25 @@ A full-stack e-commerce platform built with a microservices architecture. Includ
           Kafka
 ```
 
+Payment Service also uses a dedicated PostgreSQL database (`PAYMENT_DATABASE_URL`) for the Stripe catalog Inbox, synchronization ledger, and result Outbox. See [migration.md](./migration.md) for the staged rollout procedure.
+
 ## Services
 
-| Service           | Port | Framework                          | Database            | Responsibilities                        |
-| ----------------- | ---- | ---------------------------------- | ------------------- | --------------------------------------- |
-| `client`          | 3000 | Next.js + Tailwind CSS             | —                   | Customer storefront, cart, checkout     |
-| `admin`           | 3001 | Next.js + Tailwind CSS + Shadcn/ui | —                   | Product/order/user management dashboard |
-| `product-service` | 8000 | Express 5                          | PostgreSQL (Prisma) | Products & categories CRUD              |
-| `order-service`   | 8001 | Fastify 5                          | MongoDB (Mongoose)  | Order lifecycle management              |
-| `payment-service` | 8002 | Hono                               | —                   | Stripe payments & webhook processing    |
-| `auth-service`    | 8003 | NestJS 11                          | —                   | User sync & auth events via Clerk       |
+| Service           | Port | Framework                          | Database            | Responsibilities                         |
+| ----------------- | ---- | ---------------------------------- | ------------------- | ---------------------------------------- |
+| `client`          | 3000 | Next.js + Tailwind CSS             | —                   | Customer storefront, cart, checkout      |
+| `admin`           | 3001 | Next.js + Tailwind CSS + Shadcn/ui | —                   | Product/order/user management dashboard  |
+| `product-service` | 8000 | Express 5                          | PostgreSQL (Prisma) | Products & categories CRUD               |
+| `order-service`   | 8001 | Fastify 5                          | MongoDB (Mongoose)  | Order lifecycle management               |
+| `payment-service` | 8002 | Hono                               | PostgreSQL (Prisma) | Stripe payments, catalog sync & webhooks |
+| `auth-service`    | 8003 | NestJS 11                          | —                   | User sync & auth events via Clerk        |
 
 ## Tech Stack
 
 - **Monorepo**: pnpm workspaces + Turborepo
 - **Frontend**: Next.js, Tailwind CSS, Shadcn/ui, Zustand, React Hook Form, Zod
 - **Backend**: Express, Fastify, Hono, NestJS
-- **Databases**: PostgreSQL (Prisma ORM), MongoDB (Mongoose)
+- **Databases**: Product and Payment PostgreSQL (Prisma ORM), MongoDB (Mongoose)
 - **Messaging**: Apache Kafka (KafkaJS)
 - **Authentication**: Clerk
 - **Payments**: Stripe
@@ -83,6 +85,7 @@ Each app and service has its own `.env` file. Copy the examples below into the c
 ```bash
 # Generate Prisma client and run migrations
 pnpm --filter @repo/product-db db:migrate
+PAYMENT_DATABASE_URL=postgresql://... pnpm --filter @repo/payment-db db:migrate
 ```
 
 **4. Start all services**
@@ -105,6 +108,7 @@ pnpm --filter auth-service dev
 ## Environment Variables
 
 ### `apps/client/.env`
+
 ```env
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
@@ -119,6 +123,7 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 ```
 
 ### `apps/admin/.env`
+
 ```env
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
@@ -131,13 +136,16 @@ NEXT_PUBLIC_AUTH_SERVICE_URL=http://localhost:8003
 ```
 
 ### `apps/product-service/.env`
+
 ```env
 CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 DATABASE_URL="postgresql://admin:123456@localhost:5432/products?schema=public"
+CATALOG_SYNC_ENFORCEMENT=false
 ```
 
 ### `apps/order-service/.env`
+
 ```env
 CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
@@ -145,14 +153,18 @@ DATABASE_URL="mongodb://admin:123456@localhost:27017/orders?authSource=admin"
 ```
 
 ### `apps/payment-service/.env`
+
 ```env
 CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRECT=
+PAYMENT_DATABASE_URL="postgresql://admin:123456@localhost:5432/payments?schema=public"
+CATALOG_SYNC_ENFORCEMENT=false
 ```
 
 ### `apps/auth-service/.env`
+
 ```env
 CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
@@ -164,6 +176,7 @@ CLERK_SECRET_KEY=
 | ------------------------- | -------------------------------------------------- |
 | `@repo/kafka`             | KafkaJS producer/consumer helpers                  |
 | `@repo/product-db`        | Prisma client for the products PostgreSQL database |
+| `@repo/payment-db`        | Prisma client for catalog sync/payment PostgreSQL  |
 | `@repo/order-db`          | Mongoose models for the orders MongoDB database    |
 | `@repo/types`             | Shared TypeScript types across all services        |
 | `@repo/eslint-config`     | Shared ESLint configuration                        |
@@ -172,7 +185,7 @@ CLERK_SECRET_KEY=
 ## Common Commands
 
 ```bash
-pnpm build          # Build all apps and services
+PAYMENT_DATABASE_URL=postgresql://... pnpm build # Build all apps and services
 pnpm lint           # Lint all packages
 pnpm check-types    # Type-check all packages
 pnpm format         # Format all .ts/.tsx/.md files with Prettier
@@ -181,4 +194,12 @@ pnpm format         # Format all .ts/.tsx/.md files with Prettier
 pnpm --filter @repo/product-db db:generate   # Regenerate Prisma client
 pnpm --filter @repo/product-db db:migrate    # Run dev migrations
 pnpm --filter @repo/product-db db:deploy     # Deploy migrations to production
+pnpm --filter @repo/payment-db db:generate   # Generate payment Prisma client
+pnpm --filter @repo/payment-db db:deploy     # Deploy payment DB migrations
 ```
+
+## Reliable Product Catalog Sync
+
+Product PostgreSQL is the catalog source of truth. Product create/update/delete writes the Product state and an Outbox event in one transaction. Payment Service consumes keyed, versioned events into an Inbox/Stripe ledger, performs retryable idempotent Stripe operations in a worker, publishes versioned results through a second Outbox, and reconciles drift every 15 minutes.
+
+Checkout uses only a Stripe Price ID confirmed in the payment database when `CATALOG_SYNC_ENFORCEMENT=true`. During rollout, keep enforcement disabled, backfill existing products, reconcile to zero pending/failed/drifted items, then enable it. The Stripe Webhook → Order reliability work remains intentionally separate and is tracked in [TODO.md](./TODO.md).

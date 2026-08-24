@@ -1,5 +1,6 @@
 import { ProductType } from '@repo/types'
 import Link from 'next/link'
+import { Suspense } from 'react'
 import Categories from './Categories'
 import ProductCard from './ProductCard'
 import Filter from './Filter'
@@ -186,8 +187,14 @@ const ProductList = async ({
 
   return (
     <div className="w-full">
-      <Categories />
-      {from === FromPage.Products && <Filter />}
+      <Suspense fallback={null}>
+        <Categories />
+      </Suspense>
+      {from === FromPage.Products && (
+        <Suspense fallback={null}>
+          <Filter />
+        </Suspense>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-12">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />

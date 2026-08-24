@@ -1,4 +1,5 @@
 import ProductInteraction from '@/components/Product/ProductInteraction'
+import { Suspense } from 'react'
 import { ProductType } from '@repo/types'
 import Image from 'next/image'
 
@@ -81,11 +82,13 @@ const ProductPage = async ({
         <p className="text-gray-500">{product.description}</p>
         <h2 className="text-2xl font-semibold">${product.price}</h2>
         {/* INTERACTION */}
-        <ProductInteraction
-          product={product}
-          selectedSize={selectedSize}
-          selectedColor={selectedColor}
-        />
+        <Suspense fallback={null}>
+          <ProductInteraction
+            product={product}
+            selectedSize={selectedSize}
+            selectedColor={selectedColor}
+          />
+        </Suspense>
         {/* CARD INFO */}
         <div className="flex items-center gap-2 mt-4">
           <Image

@@ -8,7 +8,7 @@ import { CartItemType } from '@repo/types'
 import { ArrowRight, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 
 const STEP = 'step'
 
@@ -74,7 +74,7 @@ const steps = [
 //   },
 // ]
 
-const CartPage = () => {
+const CartContent = () => {
   const searchParams = useSearchParams()
   const router = useRouter()
   const activeStep = parseInt(searchParams.get(STEP) || '1')
@@ -236,5 +236,11 @@ const CartPage = () => {
     </div>
   )
 }
+
+const CartPage = () => (
+  <Suspense fallback={null}>
+    <CartContent />
+  </Suspense>
+)
 
 export default CartPage

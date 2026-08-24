@@ -5,6 +5,7 @@ import { Bell, Home } from 'lucide-react'
 import ShoppingCartIcon from './ShoppingCartIcon'
 import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs'
 import ProfileButton from '../ProfileButton'
+import { Suspense } from 'react'
 
 const Navbar = () => {
   return (
@@ -24,7 +25,9 @@ const Navbar = () => {
       </Link>
       {/* Right */}
       <div className="flex items-center gap-6">
-        <SearchBar />
+        <Suspense fallback={null}>
+          <SearchBar />
+        </Suspense>
         <Link href="/">
           <Home className="w-4 h-4 text-gray-600" />
         </Link>

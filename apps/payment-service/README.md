@@ -1,5 +1,8 @@
 # Payment service
 
+This service owns the payment PostgreSQL catalog ledger and the asynchronous
+Stripe catalog worker. Product PostgreSQL remains the catalog source of truth.
+
 The catalog sync worker requires these environment variables:
 
 ```dotenv
@@ -25,3 +28,8 @@ this phase Checkout resolves the legacy Stripe default Price on the server when
 the payment ledger is not ready. After backfill and reconciliation reach zero
 pending, failed, and drifted items, set the flag to `true`; Checkout then accepts
 only the version-confirmed Price stored in the payment database.
+
+The Stripe Webhook to Order Service path is not covered by this catalog
+reliability boundary yet. Its follow-up work is tracked in the repository
+`TODO.md`. For a staged database and application rollout, follow
+[`migration.md`](../../migration.md).

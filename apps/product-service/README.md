@@ -19,3 +19,7 @@ When the payment-service sync summary has no pending or failed items and the
 first reconciliation reports no drift, change `CATALOG_SYNC_ENFORCEMENT` to
 `true`. Public product endpoints then return only Stripe-synchronized products;
 the protected `GET /products/admin` endpoint continues to return all products.
+
+The Product migration is additive, but it must be deployed before starting the
+Outbox worker. Follow the repository [`migration.md`](../../migration.md) for
+backup, deployment, backfill, reconciliation, enforcement, and rollback steps.
