@@ -46,6 +46,7 @@ const CheckoutForm = ({ shippingForm }: CheckoutFormProps) => {
     <form className="flex flex-col gap-6">
       <PaymentElement options={{ layout: 'accordion' }} />
       <button
+        type="button"
         disabled={loading}
         onClick={handleClick}
         className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-800 p-2.5

@@ -4,7 +4,7 @@
 
 > **Reliability Update · 2026-08-24**
 >
-> 当前分支已完成 Product PostgreSQL → Kafka → Payment DB → Stripe 商品目录同步的可靠性改造。本目录中带有同名标记的 `00`、`04`、`05`、`07`、`08` 文档已做增量更新；原有风险分析被保留为改造前基线，便于形成 before/after 对照。Stripe Webhook → Order Service 仍属于待实现范围。
+> **Reliability Update · 2026-09-18：** 当前分支已完成 Product → Stripe 目录同步和 Stripe Webhook → Payment → Order 两条可靠性链路。本目录的 `00`、`04`、`05`、`07`、`08` 均保留改造前基线并追加当前实现标注，便于面试时讲清 before/after；库存预占、履约 Saga、retry topic/DLQ 和生产监控仍是下一阶段。
 
 总学习时间约 **21 小时**，建议 7 天完成。
 
@@ -71,10 +71,11 @@
 - Monorepo：pnpm 9 + Turborepo。
 - 前端：两个 Next.js 16 / React 19 应用，分别是商城与管理后台。
 - 后端：Express 商品服务、Fastify 订单服务、Hono 支付服务、NestJS 认证/用户服务。
-- 数据：Product PostgreSQL + Prisma 存商品与 Product Outbox；独立 Payment PostgreSQL + Prisma 存 Catalog Inbox、Stripe 同步账本和结果 Outbox；MongoDB + Mongoose 存订单。
+- 数据：Product PostgreSQL + Prisma 存商品与 Product Outbox；独立 Payment PostgreSQL + Prisma 存目录账本、CheckoutAttempt、Webhook Inbox、Payment Outbox 和 Order Ack Inbox；MongoDB replica set + Mongoose 存 Payment Inbox、版本化 Order 和 Ack Outbox。
 - 外部服务：Clerk、Stripe、Cloudinary。
 - 异步通信：KafkaJS，三个本地 KRaft Broker；商品目录使用 `catalog.product.sync.requested` / `catalog.product.sync.result`，支付订单链仍使用 `payment.successful`。
 - 商品目录链路已实现 Outbox/Inbox、message key、版本防乱序、Stripe 幂等重试、同步结果和定期对账。
-- 当前未使用 Redis；仍未实现库存/SKU、支付 Webhook 去重、Payment → Order Outbox/Inbox、订单消费幂等和 DLQ。
+- 支付订单链路已实现 Stripe event ID 去重、Payment/Order 双向 Outbox/Inbox、完整快照版本栅栏、Ack 与对账。
+- 当前未使用 Redis；仍未实现库存/SKU、主动退款/履约 Saga、retry topic/DLQ 和生产级可观测性。
 
 最后更新：2026-08-24。

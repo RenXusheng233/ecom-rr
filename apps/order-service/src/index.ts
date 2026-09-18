@@ -1,13 +1,18 @@
 import Fastify from 'fastify'
 import { clerkClient, clerkPlugin } from '@clerk/fastify'
 import { shouldBeUser } from './middleware/authMiddleware'
-import { connectOrderDB } from '@repo/order-db'
+import { connectOrderDB, disconnectOrderDB } from '@repo/order-db'
 import { orderRoute } from './routes/order'
 import { consumer, producer } from './utils/kafka'
 import { runKafkaSubscriptions } from './utils/subscriptions'
+import { startOrderInboxWorker } from './utils/orderWorker'
+import { startOrderOutboxWorker } from './utils/orderOutboxWorker'
+import { orderProjectionSyncRoute } from './routes/orderProjectionSync'
 
 const fastify = Fastify()
 const port = 8001
+const workerIntervals: NodeJS.Timeout[] = []
+let shuttingDown = false
 
 fastify.register(clerkPlugin)
 
@@ -40,6 +45,9 @@ fastify.get('/test', { preHandler: shouldBeUser }, async (request, reply) => {
 })
 
 fastify.register(orderRoute)
+fastify.register(orderProjectionSyncRoute, {
+  prefix: '/order-projection-sync',
+})
 
 const start = async () => {
   try {
@@ -47,6 +55,7 @@ const start = async () => {
     await producer.connect()
     await consumer.connect()
     await runKafkaSubscriptions()
+    workerIntervals.push(startOrderInboxWorker(), startOrderOutboxWorker())
     await fastify.listen({ port })
     console.log(`Order service is running on port ${port}`)
   } catch (error) {
@@ -55,4 +64,16 @@ const start = async () => {
   }
 }
 
-start()
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  workerIntervals.forEach(clearInterval)
+  await fastify.close()
+  await Promise.allSettled([consumer.disconnect(), producer.disconnect()])
+  await disconnectOrderDB()
+}
+
+process.once('SIGINT', () => void shutdown())
+process.once('SIGTERM', () => void shutdown())
+
+void start()

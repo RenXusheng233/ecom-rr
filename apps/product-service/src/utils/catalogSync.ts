@@ -11,6 +11,8 @@ type CatalogSyncEventInput = {
   operation: CatalogSyncOperation
   name?: string
   price?: number
+  sizes?: string[]
+  colors?: string[]
 }
 
 export const createCatalogSyncRequestedEvent = ({
@@ -21,8 +23,16 @@ export const createCatalogSyncRequestedEvent = ({
   operation,
   name,
   price,
+  sizes,
+  colors,
 }: CatalogSyncEventInput): CatalogSyncRequestedEvent => {
-  if (operation === 'UPSERT' && (name === undefined || price === undefined)) {
+  if (
+    operation === 'UPSERT' &&
+    (name === undefined ||
+      price === undefined ||
+      !sizes?.length ||
+      !colors?.length)
+  ) {
     throw new Error('UPSERT catalog events require a name and price')
   }
 
@@ -38,6 +48,8 @@ export const createCatalogSyncRequestedEvent = ({
             name: name as string,
             unitAmount: (price as number) * 100,
             currency: 'usd',
+            sizes: [...(sizes as string[])],
+            colors: [...(colors as string[])],
           }
         : null,
   }

@@ -1,59 +1,73 @@
 import { Hono } from 'hono'
-import Stripe from 'stripe'
-import stripe from '../utils/stripe'
-import { producer } from '../utils/kafka'
-import { topics } from '@repo/kafka'
+import type Stripe from 'stripe'
+import type { Prisma } from '@repo/payment-db'
 
-const webhookRoute = new Hono()
+type WebhookRouteDependencies = {
+  verifyEvent(
+    body: string,
+    signature: string,
+  ): Stripe.Event | Promise<Stripe.Event>
+  persistEvent(event: Stripe.Event): Promise<void>
+}
 
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRECT!
+export const createWebhookRoute = (dependencies: WebhookRouteDependencies) => {
+  const route = new Hono()
 
-webhookRoute.post('/stripe', async (c) => {
-  const body = await c.req.text()
-  const sig = c.req.header('stripe-signature')!
-
-  let event: Stripe.Event
-
-  try {
-    event = stripe.webhooks.constructEvent(body, sig, webhookSecret)
-  } catch (error) {
-    console.log('Webhook verification failed!\n', error)
-    return c.json({ error: 'Webhook verification failed!' }, 400)
-  }
-
-  switch (event.type) {
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Checkout.Session
-      const lineItems = await stripe.checkout.sessions.listLineItems(session.id)
-      const shipping = session.collected_information?.shipping_details
-      let shipping_address = ''
-      if (shipping) {
-        const { address } = shipping
-        shipping_address = `${address.line1}, ${address.line2}, ${address.country}`
-      }
-
-      producer.send(topics.payment_successful, {
-        value: {
-          userId: session.client_reference_id,
-          email: session.customer_details?.email,
-          amount: session.amount_total,
-          status: session.payment_status === 'paid' ? 'success' : 'failed',
-          products: lineItems.data.map((item) => ({
-            name: item.description,
-            quantity: item.quantity,
-            price: item.price?.unit_amount,
-          })),
-          address: shipping_address,
-        },
-      })
-      break
+  route.post('/stripe', async (context) => {
+    const signature = context.req.header('stripe-signature')
+    if (!signature) {
+      return context.json({ error: { code: 'INVALID_WEBHOOK_SIGNATURE' } }, 400)
     }
 
-    default:
-      break
-  }
+    let event: Stripe.Event
+    try {
+      event = await dependencies.verifyEvent(
+        await context.req.text(),
+        signature,
+      )
+    } catch {
+      return context.json({ error: { code: 'INVALID_WEBHOOK_SIGNATURE' } }, 400)
+    }
 
-  return c.json({ received: true })
-})
+    try {
+      await dependencies.persistEvent(event)
+    } catch (error) {
+      console.error('Stripe Webhook Inbox persistence failed', {
+        eventId: event.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      return context.json(
+        { error: { code: 'WEBHOOK_PERSISTENCE_FAILED' } },
+        500,
+      )
+    }
 
-export default webhookRoute
+    return context.json({ received: true })
+  })
+
+  return route
+}
+
+const realDependencies: WebhookRouteDependencies = {
+  verifyEvent: async (body, signature) => {
+    const { default: stripe } = await import('../utils/stripe')
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
+    if (!webhookSecret) throw new Error('STRIPE_WEBHOOK_SECRET is required')
+    return stripe.webhooks.constructEvent(body, signature, webhookSecret)
+  },
+  persistEvent: async (event) => {
+    const { paymentPrisma } = await import('@repo/payment-db')
+    await paymentPrisma.stripeWebhookInboxEvent.upsert({
+      where: { id: event.id },
+      create: {
+        id: event.id,
+        eventType: event.type,
+        stripeCreatedAt: new Date(event.created * 1000),
+        payload: JSON.parse(JSON.stringify(event)) as Prisma.InputJsonValue,
+      },
+      update: {},
+    })
+  },
+}
+
+export default createWebhookRoute(realDependencies)

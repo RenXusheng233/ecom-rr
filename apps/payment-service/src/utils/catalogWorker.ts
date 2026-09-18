@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { topics } from '@repo/kafka'
 import { paymentPrisma } from '@repo/payment-db'
 import type { CatalogSyncResultEvent } from '@repo/types'
 import { executeCatalogSyncAttempt } from './catalogAttempt'
@@ -132,6 +133,10 @@ const invalidateAfterStaleMutation = async (
         id: result.eventId,
         aggregateId: productId,
         aggregateVersion: current.desiredVersion,
+        topic: topics.catalog_product_sync_result,
+        messageKey: productId,
+        eventType: topics.catalog_product_sync_result,
+        schemaVersion: 1,
         payload: result,
       },
     })
@@ -256,6 +261,10 @@ export const runCatalogSyncBatch = async () => {
                 id: result.eventId,
                 aggregateId: item.productId,
                 aggregateVersion: item.desiredVersion,
+                topic: topics.catalog_product_sync_result,
+                messageKey: item.productId,
+                eventType: topics.catalog_product_sync_result,
+                schemaVersion: 1,
                 payload: result,
               },
             })
@@ -326,6 +335,10 @@ export const runCatalogSyncBatch = async () => {
                 id: result.eventId,
                 aggregateId: item.productId,
                 aggregateVersion: item.desiredVersion,
+                topic: topics.catalog_product_sync_result,
+                messageKey: item.productId,
+                eventType: topics.catalog_product_sync_result,
+                schemaVersion: 1,
                 payload: result,
               },
             })

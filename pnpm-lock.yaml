@@ -341,6 +341,9 @@ importers:
       '@repo/order-db':
         specifier: workspace:*
         version: link:../../packages/order-db
+      '@repo/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -351,9 +354,6 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
-      '@repo/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
@@ -381,6 +381,9 @@ importers:
       '@repo/payment-db':
         specifier: workspace:*
         version: link:../../packages/payment-db
+      '@repo/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       hono:
         specifier: ^4.10.7
         version: 4.10.7
@@ -391,9 +394,6 @@ importers:
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
-      '@repo/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config
@@ -576,9 +576,6 @@ importers:
 
   packages/types:
     dependencies:
-      '@repo/order-db':
-        specifier: workspace:*
-        version: link:../order-db
       '@repo/product-db':
         specifier: workspace:*
         version: link:../product-db
@@ -865,6 +862,7 @@ packages:
   '@clerk/types@4.101.6':
     resolution: {integrity: sha512-Ah6R65loy5Aq1jBpWo3x01IOlYJfgVn4LVAkSXKVQDtehn8w1bT2uJ7BTa2zH72A8F4K2HivkmMQa+v/37tLFA==}
     engines: {node: '>=18.17.0'}
+    deprecated: 'This package is no longer supported. Please import types from @clerk/shared/types instead. See the upgrade guide for more info: https://clerk.com/docs/guides/development/upgrading/upgrade-guides/core-3'
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}

@@ -1,7 +1,4 @@
-type CheckoutCartItem = {
-  id: number
-  quantity: number
-}
+import type { CheckoutItemInput } from '@repo/types'
 
 type CheckoutCatalogItem = {
   productId: string
@@ -10,76 +7,106 @@ type CheckoutCatalogItem = {
   appliedVersion: number | null
   stripePriceId: string | null
   desiredOperation: 'UPSERT' | 'ARCHIVE'
+  desiredName: string | null
+  desiredUnitAmount: number | null
+  desiredCurrency: string | null
+  desiredSizes: string[]
+  desiredColors: string[]
+}
+
+export type CheckoutItemSnapshot = {
+  productId: string
+  name: string
+  unitAmount: number
+  currency: 'usd'
+  stripePriceId: string
+  quantity: number
+  selectedSize: string
+  selectedColor: string
 }
 
 export class CatalogSyncPendingError extends Error {
   readonly code = 'CATALOG_SYNC_PENDING'
 
-  constructor(productId: number) {
+  constructor(productId: string) {
     super(`Product ${productId} is not synchronized with Stripe`)
   }
 }
 
-export const buildCheckoutLineItems = (
-  cart: CheckoutCartItem[],
+export class InvalidCatalogOptionError extends Error {
+  constructor(
+    readonly code: 'INVALID_PRODUCT_SIZE' | 'INVALID_PRODUCT_COLOR',
+    productId: string,
+  ) {
+    super(`Invalid catalog option for product ${productId}`)
+  }
+}
+
+export const buildCheckoutSnapshot = (
+  cart: CheckoutItemInput[],
   catalogItems: CheckoutCatalogItem[],
 ) => {
   const catalogByProduct = new Map(
     catalogItems.map((item) => [item.productId, item]),
   )
 
-  return cart.map(({ id, quantity }) => {
+  const items = cart.map((cartItem): CheckoutItemSnapshot => {
+    const { productId, quantity, selectedSize, selectedColor } = cartItem
     if (!Number.isSafeInteger(quantity) || quantity < 1) {
-      throw new Error(`Invalid quantity for product ${id}`)
+      throw new Error(`Invalid quantity for product ${productId}`)
     }
 
-    const item = catalogByProduct.get(id.toString())
+    const item = catalogByProduct.get(productId)
     if (
       !item ||
       item.status !== 'SYNCED' ||
       item.desiredOperation !== 'UPSERT' ||
       item.appliedVersion !== item.desiredVersion ||
-      !item.stripePriceId
+      !item.stripePriceId ||
+      !item.desiredName ||
+      !Number.isSafeInteger(item.desiredUnitAmount) ||
+      (item.desiredUnitAmount ?? 0) < 0 ||
+      item.desiredCurrency !== 'usd'
     ) {
-      throw new CatalogSyncPendingError(id)
+      throw new CatalogSyncPendingError(productId)
+    }
+    if (!item.desiredSizes.includes(selectedSize)) {
+      throw new InvalidCatalogOptionError('INVALID_PRODUCT_SIZE', productId)
+    }
+    if (!item.desiredColors.includes(selectedColor)) {
+      throw new InvalidCatalogOptionError('INVALID_PRODUCT_COLOR', productId)
     }
 
-    return { price: item.stripePriceId, quantity }
+    return {
+      productId,
+      name: item.desiredName,
+      unitAmount: item.desiredUnitAmount as number,
+      currency: 'usd',
+      stripePriceId: item.stripePriceId,
+      quantity,
+      selectedSize,
+      selectedColor,
+    }
   })
-}
 
-export const buildCheckoutLineItemsWithFallback = async (
-  cart: CheckoutCartItem[],
-  catalogItems: CheckoutCatalogItem[],
-  enforcementEnabled: boolean,
-  resolveLegacyPrice: (productId: string) => Promise<string | null>,
-) => {
-  const catalogByProduct = new Map(
-    catalogItems.map((item) => [item.productId, item]),
-  )
+  const amountTotal = items.reduce((total, item) => {
+    const lineTotal = item.unitAmount * item.quantity
+    if (
+      !Number.isSafeInteger(lineTotal) ||
+      !Number.isSafeInteger(total + lineTotal)
+    ) {
+      throw new Error('Checkout amount exceeds the safe integer range')
+    }
+    return total + lineTotal
+  }, 0)
 
-  return Promise.all(
-    cart.map(async ({ id, quantity }) => {
-      if (!Number.isSafeInteger(quantity) || quantity < 1) {
-        throw new Error(`Invalid quantity for product ${id}`)
-      }
-
-      const item = catalogByProduct.get(id.toString())
-      if (
-        item?.status === 'SYNCED' &&
-        item.desiredOperation === 'UPSERT' &&
-        item.appliedVersion === item.desiredVersion &&
-        item.stripePriceId
-      ) {
-        return { price: item.stripePriceId, quantity }
-      }
-
-      if (!enforcementEnabled) {
-        const legacyPriceId = await resolveLegacyPrice(id.toString())
-        if (legacyPriceId) return { price: legacyPriceId, quantity }
-      }
-
-      throw new CatalogSyncPendingError(id)
-    }),
-  )
+  return {
+    lineItems: items.map(({ stripePriceId, quantity }) => ({
+      price: stripePriceId,
+      quantity,
+    })),
+    items,
+    amountTotal,
+    currency: 'usd' as const,
+  }
 }

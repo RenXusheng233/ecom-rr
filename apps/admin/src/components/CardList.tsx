@@ -57,18 +57,27 @@ const CardList = async ({ title }: { title: string }) => {
                 <CardFooter className="p-0">${price}</CardFooter>
               </Card>
             ))
-          : orders.map(({ _id, email, status, amount }) => (
-              <Card
-                key={_id}
-                className="flex-row items-center justify-between gap-4 p-4"
-              >
-                <CardContent className="p-0 flex-1">
-                  <CardTitle className="text-sm font-medium">{email}</CardTitle>
-                  <Badge variant="secondary">{status}</Badge>
-                </CardContent>
-                <CardFooter className="p-0">${amount / 100}</CardFooter>
-              </Card>
-            ))}
+          : orders.map(
+              ({ _id, email, paymentStatus, amountTotal, currency }) => (
+                <Card
+                  key={_id}
+                  className="flex-row items-center justify-between gap-4 p-4"
+                >
+                  <CardContent className="p-0 flex-1">
+                    <CardTitle className="text-sm font-medium">
+                      {email}
+                    </CardTitle>
+                    <Badge variant="secondary">{paymentStatus}</Badge>
+                  </CardContent>
+                  <CardFooter className="p-0">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: currency.toUpperCase(),
+                    }).format(amountTotal / 100)}
+                  </CardFooter>
+                </Card>
+              ),
+            )}
       </div>
     </div>
   )

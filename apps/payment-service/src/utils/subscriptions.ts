@@ -1,9 +1,13 @@
 import { topics } from '@repo/kafka'
 import { consumer } from './kafka'
 import { paymentPrisma } from '@repo/payment-db'
-import type { CatalogSyncRequestedEvent } from '@repo/types'
+import {
+  orderPaymentAppliedEventSchema,
+  type CatalogSyncRequestedEvent,
+} from '@repo/types'
 import { shouldApplyCatalogEvent } from './catalogEvent'
 import { incomingCatalogTaskState } from './catalogProcessing'
+import { persistOrderProjectionAck } from './orderProjectionAck'
 
 const validateEvent = (message: unknown): CatalogSyncRequestedEvent => {
   const event = message as CatalogSyncRequestedEvent
@@ -26,7 +30,11 @@ const validateEvent = (message: unknown): CatalogSyncRequestedEvent => {
       !event.product.name?.trim() ||
       event.product.currency !== 'usd' ||
       !Number.isSafeInteger(event.product.unitAmount) ||
-      event.product.unitAmount < 1)
+      event.product.unitAmount < 1 ||
+      !Array.isArray(event.product.sizes) ||
+      event.product.sizes.length === 0 ||
+      !Array.isArray(event.product.colors) ||
+      event.product.colors.length === 0)
   ) {
     throw new Error('UPSERT catalog sync event has invalid product data')
   }
@@ -82,6 +90,8 @@ export const runKafkaSubscriptions = async () => {
               desiredName: event.product?.name,
               desiredUnitAmount: event.product?.unitAmount,
               desiredCurrency: event.product?.currency,
+              desiredSizes: event.product?.sizes ?? [],
+              desiredColors: event.product?.colors ?? [],
               desiredRunId: event.eventId,
               status: 'PENDING',
             },
@@ -92,6 +102,8 @@ export const runKafkaSubscriptions = async () => {
               desiredName: event.product?.name,
               desiredUnitAmount: event.product?.unitAmount,
               desiredCurrency: event.product?.currency,
+              desiredSizes: event.product?.sizes ?? [],
+              desiredColors: event.product?.colors ?? [],
               desiredRunId: event.eventId,
               ...incomingCatalogTaskState(current?.status ?? 'PENDING'),
               ...(current?.status === 'PROCESSING'
@@ -100,6 +112,29 @@ export const runKafkaSubscriptions = async () => {
             },
           })
         })
+      },
+    },
+    {
+      topicName: topics.order_payment_applied,
+      errorPolicy: 'retry',
+      invalidMessageHandler: async (_rawMessage, metadata) => {
+        console.error('Rejected malformed Order projection acknowledgement', {
+          topic: metadata.topic,
+          partition: metadata.partition,
+          offset: metadata.offset,
+        })
+      },
+      topicHandler: async (message, metadata) => {
+        const parsed = orderPaymentAppliedEventSchema.safeParse(message)
+        if (!parsed.success) {
+          console.error('Rejected invalid Order projection acknowledgement', {
+            topic: metadata.topic,
+            partition: metadata.partition,
+            offset: metadata.offset,
+          })
+          return
+        }
+        await persistOrderProjectionAck(parsed.data)
       },
     },
   ])

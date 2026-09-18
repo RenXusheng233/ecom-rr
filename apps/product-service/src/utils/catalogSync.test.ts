@@ -16,6 +16,8 @@ test('builds a complete UPSERT event using cents', () => {
     operation: 'UPSERT',
     name: 'Trail shoe',
     price: 129,
+    sizes: ['41', '42'],
+    colors: ['black'],
   })
 
   assert.deepEqual(event, {
@@ -28,6 +30,8 @@ test('builds a complete UPSERT event using cents', () => {
       name: 'Trail shoe',
       unitAmount: 12900,
       currency: 'usd',
+      sizes: ['41', '42'],
+      colors: ['black'],
     },
   })
 })

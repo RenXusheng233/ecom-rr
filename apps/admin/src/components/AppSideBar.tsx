@@ -6,6 +6,7 @@ import {
   Home,
   Inbox,
   Plus,
+  RefreshCcw,
   Search,
   Settings,
   Shirt,
@@ -213,6 +214,14 @@ const renderOrdersGroup = () => (
             <Link href="/orders">
               <ShoppingBasket />
               See All Orders
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <Link href="/payment-sync">
+              <RefreshCcw />
+              Payment Sync
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

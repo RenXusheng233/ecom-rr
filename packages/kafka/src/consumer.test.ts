@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ConsumerRunConfig, Kafka } from 'kafkajs'
-import { createConsumer } from './consumer'
+import { createConsumer, type KafkaMessageMetadata } from './consumer'
 
 const createHarness = () => {
   let runConfig: ConsumerRunConfig | undefined
@@ -89,4 +89,118 @@ test('legacy topics keep the log-and-skip behavior by default', async () => {
   } finally {
     console.log = originalLog
   }
+})
+
+test('passes Kafka coordinates and key to the handler', async () => {
+  const harness = createHarness()
+  let metadata: KafkaMessageMetadata | undefined
+
+  await harness.consumer.subscribe([
+    {
+      topicName: 'payment.order.lifecycle',
+      topicHandler: async (_value, context) => {
+        metadata = context
+      },
+    },
+  ])
+
+  await harness.eachMessage()({
+    topic: 'payment.order.lifecycle',
+    partition: 2,
+    message: {
+      key: Buffer.from('order-1'),
+      value: Buffer.from('{"id":"event-1"}'),
+      timestamp: '0',
+      attributes: 0,
+      offset: '17',
+      headers: {},
+    },
+    heartbeat: async () => undefined,
+    pause: () => () => undefined,
+  })
+
+  assert.deepEqual(metadata, {
+    topic: 'payment.order.lifecycle',
+    partition: 2,
+    offset: '17',
+    key: 'order-1',
+  })
+})
+
+test('routes invalid JSON to the topic invalid-message handler', async () => {
+  const harness = createHarness()
+  let rejected:
+    | {
+        rawValue: string
+        metadata: KafkaMessageMetadata
+        message: string
+      }
+    | undefined
+
+  await harness.consumer.subscribe([
+    {
+      topicName: 'payment.order.lifecycle',
+      topicHandler: async () => {
+        assert.fail('The decoded handler must not receive invalid JSON')
+      },
+      invalidMessageHandler: async (rawValue, metadata, error) => {
+        rejected = { rawValue, metadata, message: error.message }
+      },
+    },
+  ])
+
+  await harness.eachMessage()({
+    topic: 'payment.order.lifecycle',
+    partition: 3,
+    message: {
+      key: Buffer.from('order-2'),
+      value: Buffer.from('{not-json'),
+      timestamp: '0',
+      attributes: 0,
+      offset: '19',
+      headers: {},
+    },
+    heartbeat: async () => undefined,
+    pause: () => () => undefined,
+  })
+
+  assert.equal(rejected?.rawValue, '{not-json')
+  assert.deepEqual(rejected?.metadata, {
+    topic: 'payment.order.lifecycle',
+    partition: 3,
+    offset: '19',
+    key: 'order-2',
+  })
+  assert.match(rejected?.message ?? '', /JSON/)
+})
+
+test('routes empty lifecycle values to the invalid-message handler', async () => {
+  const harness = createHarness()
+  let reason = ''
+  await harness.consumer.subscribe([
+    {
+      topicName: 'payment.order.lifecycle',
+      topicHandler: async () => assert.fail('must not handle an empty value'),
+      invalidMessageHandler: async (_rawValue, _metadata, error) => {
+        reason = error.message
+      },
+    },
+  ])
+
+  await harness.eachMessage()({
+    topic: 'payment.order.lifecycle',
+    partition: 0,
+    message: {
+      key: Buffer.from('order-1'),
+      value: Buffer.alloc(0),
+      timestamp: '0',
+      attributes: 0,
+      offset: '20',
+      headers: {},
+    },
+    heartbeat: async () => undefined,
+    pause: () => () => undefined,
+  })
+
+  assert.match(reason, /empty/)
 })

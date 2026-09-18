@@ -5,7 +5,14 @@ import { createCatalogSyncRequestedEvent } from '../utils/catalogSync'
 
 const createOutboxEvent = async (
   tx: Prisma.TransactionClient,
-  product: { id: number; name: string; price: number; catalogVersion: number },
+  product: {
+    id: number
+    name: string
+    price: number
+    sizes: string[]
+    colors: string[]
+    catalogVersion: number
+  },
   operation: 'UPSERT' | 'ARCHIVE',
 ) => {
   const eventId = randomUUID()
@@ -17,6 +24,8 @@ const createOutboxEvent = async (
     operation,
     name: product.name,
     price: product.price,
+    sizes: product.sizes,
+    colors: product.colors,
   })
 
   await tx.productOutboxEvent.create({

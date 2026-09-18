@@ -8,6 +8,8 @@ export type CatalogProductSnapshot = {
   name: string
   unitAmount: number
   currency: 'usd'
+  sizes: string[]
+  colors: string[]
 }
 
 export type CatalogSyncRequestedEvent = {

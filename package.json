@@ -6,6 +6,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test:catalog-sync": "pnpm --filter @repo/kafka test && pnpm --filter product-service test && pnpm --filter payment-service test",
+    "test:payment-order": "pnpm --filter @repo/kafka test && pnpm --filter product-service test && pnpm --filter payment-service test && pnpm --filter order-service test",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
   },

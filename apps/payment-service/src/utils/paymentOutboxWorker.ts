@@ -1,13 +1,39 @@
-import { topics } from '@repo/kafka'
 import { paymentPrisma } from '@repo/payment-db'
 import { producer } from './kafka'
 import { randomUUID } from 'node:crypto'
 
 const retryDelay = (attempt: number) =>
-  Math.min(1000 * 2 ** Math.max(0, attempt - 1), 300000)
+  Math.min(1000 * 2 ** Math.max(0, attempt - 1), 300000) +
+  Math.floor(Math.random() * 1000)
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error)
+
+type PublishableOutboxEvent = {
+  topic: string
+  messageKey: string
+  eventType: string
+  schemaVersion: number
+  payload: unknown
+}
+
+type OutboxSender = (
+  topic: string,
+  message: object,
+  options: { key: string; headers: Record<string, string> },
+) => Promise<void>
+
+export const publishPaymentOutboxEvent = async (
+  event: PublishableOutboxEvent,
+  send: OutboxSender,
+) =>
+  send(event.topic, event.payload as object, {
+    key: event.messageKey,
+    headers: {
+      eventType: event.eventType,
+      schemaVersion: event.schemaVersion.toString(),
+    },
+  })
 
 export const runPaymentOutboxBatch = async () => {
   const now = new Date()
@@ -17,7 +43,11 @@ export const runPaymentOutboxBatch = async () => {
       nextAttemptAt: { lte: now },
       OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }],
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [
+      { aggregateId: 'asc' },
+      { aggregateVersion: 'asc' },
+      { createdAt: 'asc' },
+    ],
     take: 50,
   })
 
@@ -39,14 +69,7 @@ export const runPaymentOutboxBatch = async () => {
     if (claimed.count === 0) continue
 
     try {
-      await producer.send(
-        topics.catalog_product_sync_result,
-        event.payload as object,
-        {
-          key: event.aggregateId,
-          headers: { eventType: 'catalog-sync-result' },
-        },
-      )
+      await publishPaymentOutboxEvent(event, producer.send)
       await paymentPrisma.paymentOutboxEvent.updateMany({
         where: { id: event.id, claimToken },
         data: {

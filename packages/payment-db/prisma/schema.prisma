@@ -23,6 +23,8 @@ model StripeCatalogItem {
   desiredName       String?
   desiredUnitAmount Int?
   desiredCurrency   String?
+  desiredSizes      String[]          @default([])
+  desiredColors     String[]          @default([])
   desiredRunId      String
   appliedVersion    Int?
   stripeProductId   String?
@@ -47,6 +49,12 @@ model PaymentOutboxEvent {
   id               String       @id @default(uuid())
   aggregateId      String
   aggregateVersion Int
+  topic            String
+  messageKey       String
+  eventType        String
+  schemaVersion    Int          @default(1)
+  correlationId    String?
+  causationId      String?
   payload          Json
   status           OutboxStatus @default(PENDING)
   attempts         Int          @default(0)
@@ -59,6 +67,68 @@ model PaymentOutboxEvent {
   updatedAt        DateTime     @updatedAt
 
   @@index([status, nextAttemptAt])
+}
+
+model CheckoutAttempt {
+  id                       String        @id @default(uuid())
+  orderId                  String        @unique @default(uuid())
+  userId                   String
+  clientRequestId          String
+  requestHash              String
+  paymentStatus            PaymentStatus @default(CREATING)
+  refundStatus             RefundStatus  @default(NONE)
+  disputeStatus            DisputeStatus @default(NONE)
+  version                  Int           @default(0)
+  currency                 String        @default("usd")
+  amountTotal              Int
+  amountRefunded           Int           @default(0)
+  itemsSnapshot            Json
+  email                    String?
+  shippingSnapshot         Json?
+  stripeCheckoutSessionId  String?       @unique
+  stripePaymentIntentId    String?       @unique
+  stripeClientSecret       String?
+  lastStripeEventCreatedAt DateTime?
+  lastStripeReconciledAt   DateTime?
+  lastOrderReplayAt        DateTime?
+  orderAppliedVersion      Int?
+  orderAppliedAt           DateTime?
+  orderExists              Boolean       @default(false)
+  lastError                String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  @@unique([userId, clientRequestId])
+  @@index([paymentStatus, updatedAt])
+  @@index([lastStripeReconciledAt])
+  @@index([lastOrderReplayAt])
+}
+
+model StripeWebhookInboxEvent {
+  id              String             @id
+  eventType       String
+  stripeCreatedAt DateTime
+  payload         Json
+  status          WebhookInboxStatus @default(RECEIVED)
+  attempts        Int                @default(0)
+  nextAttemptAt   DateTime           @default(now())
+  leaseUntil      DateTime?
+  claimToken      String?
+  lastError       String?
+  receivedAt      DateTime           @default(now())
+  processedAt     DateTime?
+
+  @@index([status, nextAttemptAt])
+}
+
+model OrderProjectionInboxEvent {
+  id               String   @id
+  orderId          String
+  paymentAttemptId String
+  appliedVersion   Int
+  receivedAt       DateTime @default(now())
+
+  @@index([orderId, appliedVersion])
 }
 
 enum CatalogOperation {
@@ -76,4 +146,35 @@ enum CatalogTaskStatus {
 enum OutboxStatus {
   PENDING
   PUBLISHED
+}
+
+enum PaymentStatus {
+  CREATING
+  OPEN
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+enum RefundStatus {
+  NONE
+  PARTIAL
+  FULL
+}
+
+enum DisputeStatus {
+  NONE
+  OPEN
+  WON
+  LOST
+}
+
+enum WebhookInboxStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  IGNORED
+  FAILED
 }

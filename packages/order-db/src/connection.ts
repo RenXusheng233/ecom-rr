@@ -1,4 +1,8 @@
 import mongoose from 'mongoose'
+import { OrderOutboxEvent } from './order-outbox-model'
+import { Order } from './order-model'
+import { PaymentEventInbox } from './payment-event-inbox-model'
+import { RejectedPaymentEvent } from './rejected-payment-event-model'
 
 let isConnected = false
 
@@ -9,12 +13,43 @@ export const connectOrderDB = async () => {
     throw new Error('DATABASE_URL is not defined in env file!')
   }
 
+  await mongoose.connect(process.env.DATABASE_URL)
   try {
-    mongoose.connect(process.env.DATABASE_URL)
+    const hello = await mongoose.connection.db?.admin().command({ hello: 1 })
+    if (!hello?.setName) {
+      throw new Error('Order MongoDB must run as a replica set')
+    }
+
+    await Promise.all([
+      Order.createIndexes(),
+      PaymentEventInbox.createIndexes(),
+      OrderOutboxEvent.createIndexes(),
+      RejectedPaymentEvent.createIndexes(),
+    ])
+
+    const session = await mongoose.startSession()
+    try {
+      await session.withTransaction(async () => {
+        await Order.findOne({ orderId: '__transaction_probe__' })
+          .session(session)
+          .lean()
+      })
+    } finally {
+      await session.endSession()
+    }
+
     isConnected = true
-    console.log('Connected to mongoDB')
+    console.log('Connected to Order MongoDB replica set')
   } catch (error) {
-    console.error(error)
+    await mongoose.disconnect()
     throw error
   }
+}
+
+export const startOrderDbSession = () => mongoose.startSession()
+
+export const disconnectOrderDB = async () => {
+  if (!isConnected && mongoose.connection.readyState === 0) return
+  await mongoose.disconnect()
+  isConnected = false
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@repo/product-db'
 import { createCatalogSyncRequestedEvent } from '../utils/catalogSync'
+import { needsCatalogOptionBackfill } from '../utils/catalogBackfill'
 
 const BATCH_SIZE = 100
 
@@ -17,33 +18,63 @@ const backfill = async () => {
     if (products.length === 0) break
 
     for (const product of products) {
-      const eventId = randomUUID()
-      const event = createCatalogSyncRequestedEvent({
-        eventId,
-        occurredAt: new Date(),
-        productId: product.id,
-        catalogVersion: product.catalogVersion,
-        operation: 'UPSERT',
-        name: product.name,
-        price: product.price,
-      })
-
-      await prisma.productOutboxEvent.upsert({
-        where: {
-          aggregateId_aggregateVersion_operation: {
-            aggregateId: product.id.toString(),
-            aggregateVersion: product.catalogVersion,
-            operation: 'UPSERT',
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`
+          SELECT "id"
+          FROM "Product"
+          WHERE "id" = ${product.id}
+          FOR UPDATE
+        `
+        const current = await tx.product.findUniqueOrThrow({
+          where: { id: product.id },
+        })
+        const currentOutbox = await tx.productOutboxEvent.findUnique({
+          where: {
+            aggregateId_aggregateVersion_operation: {
+              aggregateId: current.id.toString(),
+              aggregateVersion: current.catalogVersion,
+              operation: 'UPSERT',
+            },
           },
-        },
-        create: {
-          id: eventId,
-          aggregateId: product.id.toString(),
-          aggregateVersion: product.catalogVersion,
+        })
+        if (
+          currentOutbox &&
+          !needsCatalogOptionBackfill(currentOutbox.payload)
+        ) {
+          return
+        }
+
+        const updated = await tx.product.update({
+          where: { id: current.id },
+          data: {
+            catalogVersion: { increment: 1 },
+            stripeSyncStatus: 'PENDING',
+            stripeSyncedAt: null,
+            stripeSyncError: null,
+          },
+        })
+        const eventId = randomUUID()
+        const event = createCatalogSyncRequestedEvent({
+          eventId,
+          occurredAt: new Date(),
+          productId: updated.id,
+          catalogVersion: updated.catalogVersion,
           operation: 'UPSERT',
-          payload: event,
-        },
-        update: {},
+          name: updated.name,
+          price: updated.price,
+          sizes: updated.sizes,
+          colors: updated.colors,
+        })
+
+        await tx.productOutboxEvent.create({
+          data: {
+            id: eventId,
+            aggregateId: updated.id.toString(),
+            aggregateVersion: updated.catalogVersion,
+            operation: 'UPSERT',
+            payload: event,
+          },
+        })
       })
     }
 

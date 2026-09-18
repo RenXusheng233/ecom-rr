@@ -1,8 +1,6 @@
 # 05｜Kafka 事件驱动与可靠性
 
-> **Reliability Update · 2026-08-24**
->
-> 商品目录 Kafka 链路已经完成可靠性改造；本章保留旧 topic 和失败窗口作为 before 基线。`payment.successful` 的 Webhook → Order 链路仍使用旧策略，不能把商品目录侧的完成项外推到整个支付系统。
+> **Reliability Update · 2026-09-18：** 商品目录和 Payment → Order Kafka 链路均已完成可靠性改造。本章保留 `payment.successful` 与 fire-and-forget 风险作为 before 基线；当前使用 `payment.order.lifecycle` / `order.payment.applied`、稳定 envelope、同订单 key、双向 Inbox/Outbox 和版本 fence。
 
 ## 学习目标
 
@@ -35,11 +33,12 @@
 
 #### Reliability Update · 2026-08-24（当前商品目录拓扑）
 
-| Topic                            | Producer                  | Consumer                        | 可靠性边界                                                             |
-| -------------------------------- | ------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
-| `catalog.product.sync.requested` | Product Outbox dispatcher | Payment catalog consumer        | Product ID 为 key；版本化 UPSERT/ARCHIVE；Payment Inbox 去重           |
-| `catalog.product.sync.result`    | Payment Outbox dispatcher | Product catalog result consumer | Product ID 为 key；仅同版本结果可更新状态                              |
-| `payment.successful`             | Payment Service Webhook   | Order Service                   | 遗留订单链路，仍待补 Webhook Inbox、Payment Outbox、Order Inbox 与幂等 |
+| Topic                            | Producer                  | Consumer                        | 可靠性边界                                                          |
+| -------------------------------- | ------------------------- | ------------------------------- | ------------------------------------------------------------------- |
+| `catalog.product.sync.requested` | Product Outbox dispatcher | Payment catalog consumer        | Product ID 为 key；版本化 UPSERT/ARCHIVE；Payment Inbox 去重        |
+| `catalog.product.sync.result`    | Payment Outbox dispatcher | Product catalog result consumer | Product ID 为 key；仅同版本结果可更新状态                           |
+| `payment.order.lifecycle`        | Payment Outbox dispatcher | Order Payment Inbox             | `orderId` 为 key；完整快照；event ID 去重；aggregate version 防乱序 |
+| `order.payment.applied`          | Order Outbox dispatcher   | Payment Ack Inbox               | `orderId` 为 key；确认已应用版本和 Order 是否存在                   |
 
 旧 `product.created` / `product.deleted` 常量仍可能存在于共享契约中，但不再承担当前商品目录同步主链路。Catalog 事件具有 `eventId`、商品 ID、商品版本、操作和完整期望快照；Producer 已支持 message key。独立的事件 schema version 仍属于契约治理待办。
 
@@ -118,7 +117,7 @@ Product Controller 和 Stripe Webhook 调用 `producer.send(...)` 时没有 `awa
 
 仅仅加 `await` 仍不能解决“数据库成功、Kafka 失败”的双写窗口。可靠方案是 Outbox。
 
-> **更新说明：** 上述 Product Controller 风险是改造前基线；当前商品写入与 Product Outbox 已在同一事务，dispatcher 持续重试发布。Stripe Webhook → `payment.successful` 的直接发布风险仍然存在，记录在根目录 [`TODO.md`](../../TODO.md)。
+> **更新说明：** 上述 Product Controller 与旧 Webhook 直接发布风险均是改造前基线。当前商品写入与 Product Outbox 同事务；Webhook 先落 Inbox，支付状态与 Payment Outbox 同事务；Order Inbox、Order 投影与 Ack Outbox 使用 Mongo transaction。
 
 ## 5. Consumer 可靠性与幂等
 
@@ -130,7 +129,7 @@ Product Controller 和 Stripe Webhook 调用 `producer.send(...)` 时没有 `awa
 - `createStripeProduct/deleteStripeProduct` 内部捕获错误并返回 error，也不会触发重试。
 - 没有 event ID、幂等表、唯一约束、重试 Topic 或 DLQ。
 
-> **Reliability Update · 2026-08-24：** 上述行为仍描述共享的遗留订单 consumer。Catalog consumer 使用单独的“异常重抛”策略，并先以数据库事务持久化 Inbox/ledger，再提交 offset；Stripe 外部调用交给可 lease 重领的 worker。worker 对网络错误、429、5xx 有限退避重试，对永久错误立即失败；结果由第二个 Outbox 可靠发布。Catalog 路径已经有 event ID、唯一约束和版本幂等，但尚未引入 retry topic/DLQ。
+> **Reliability Update · 2026-09-18：** 上述吞错行为描述旧 consumer。Catalog 与新 lifecycle consumer 都使用异常重抛策略；合法消息先持久化 Inbox 再提交 offset，外部/业务处理交给可 lease 重领的 worker。Order 对合法事件持久化失败会重抛；坏 JSON/坏契约保存为带 Kafka coordinate 的拒绝记录后跳过，避免 poison message 永久阻塞 partition。两条路径仍未引入独立 retry topic/DLQ。
 
 ### 幂等消费者模式
 
@@ -250,26 +249,27 @@ Publisher 可轮询，也可用 CDC（如 Debezium）捕获 WAL/change log。即
 - handler 耗时、数据库/Stripe 错误；
 - broker 磁盘、under-replicated partitions、ISR 变化。
 
-优雅停机：停止接收新请求 → 停止拉取/等待 handler 完成 → 提交正确 offset → disconnect consumer/producer → 关闭数据库。当前服务没有 signal handler，应补齐。
+优雅停机：停止接收新请求 → 停止 worker interval → 等待/中止当前 handler → disconnect consumer/producer → 关闭数据库。Payment 与 Order Service 当前已注册 SIGINT/SIGTERM shutdown；仍可继续增强超时上限和运行中任务 drain 指标。
 
 ## 10. 当前项目的改进优先级
 
-> **Reliability Update · 2026-08-24：** 以下清单改为“已完成的商品目录能力 + 尚待完成的支付订单能力”。完成标记只代表当前分支代码，不代表生产环境已完成迁移和 Test Mode 冒烟。
+> **Reliability Update · 2026-09-18：** 完成标记只代表当前分支代码，不代表生产环境已完成迁移、故障演练和 Test Mode 冒烟。
 
 ### P0：正确性
 
 1. [x] Catalog 事件加入唯一 ID、aggregate ID、商品版本和 message key；独立 schema version 仍待补充。
 2. [x] Catalog 发布由 Outbox dispatcher 等待结果并持久化错误，不静默丢失。
-3. [ ] Webhook 与订单库建立唯一幂等键。
-4. [ ] `payment.successful` consumer handler 失败进入重试路径，不能吞异常后提交 offset。
+3. [x] Webhook 以 Stripe event ID 去重，Order Inbox/Order 唯一索引建立幂等边界。
+4. [x] lifecycle consumer 数据库失败重抛；坏消息持久化 rejected record 后跳过。
 
 ### P1：一致性与恢复
 
 1. [x] Product + Product Outbox 同事务，Payment Inbox/ledger 同事务，Catalog result 使用 Payment Outbox。
 2. [x] 商品/Stripe 自动与手动对账、失败任务重置和管理员状态查询。
-3. [ ] Order Consumer 使用 processed event/唯一约束。
-4. [ ] Payment → Order Retry topics + DLQ + 告警与重放工具。
-5. [ ] Stripe payment/payment DB/Order MongoDB 定期对账。
+3. [x] Order Consumer 使用 PaymentEventInbox event ID 唯一约束和 paymentVersion fence。
+4. [x] Payment → Order Webhook Inbox、Payment Outbox、Order Inbox/transaction/Outbox、Ack 与跨账本对账。
+5. [ ] Payment → Order Retry topics + DLQ + 指标告警；当前使用数据库 FAILED/rejected 记录和管理员重试。
+6. [x] Stripe payment / Payment DB / Order MongoDB 定期对账。
 
 ### P2：治理
 

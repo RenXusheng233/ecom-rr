@@ -2,7 +2,7 @@
 
 > **Reliability Update · 2026-08-24**
 >
-> 当前分支新增 Product/Payment 两套 PostgreSQL 可靠同步模型。原有数据库理论保持不变，更新区块补充已经落地的事务边界、Inbox/Outbox、版本条件更新与迁移方式。
+> **Reliability Update · 2026-09-18：** 当前分支除 Product/Payment 两套 PostgreSQL 目录模型外，还增加 CheckoutAttempt、Stripe Webhook Inbox、Payment lifecycle Outbox、Order Ack Inbox，以及 Mongo Payment Inbox/Order/Outbox 事务边界。原有数据库理论保持不变，更新区块用于区分改造前风险与当前事实。
 
 ## 学习目标
 
@@ -23,6 +23,8 @@
 
 Payment Service 使用独立 PostgreSQL：`CatalogInboxEvent` 按 event ID 去重，`StripeCatalogItem` 保存期望/已应用版本及 Stripe Product/Price ID，`PaymentOutboxEvent` 可靠发布同步结果。Product PostgreSQL 仍是商品期望状态的唯一事实源，Payment DB 是 Stripe 已应用状态与 Checkout Price 的本地账本。
 
+**Payment → Order Update · 2026-09-18：** Payment DB 还保存 `CheckoutAttempt`、按 Stripe `event.id` 唯一的 `StripeWebhookInboxEvent` 和按 Ack event ID 唯一的 `OrderProjectionInboxEvent`。支付状态更新、aggregate version 递增和生命周期 Outbox 在同一 PostgreSQL 事务提交。Order 继续使用 MongoDB，但要求 replica set；worker 在同一 Mongo transaction 提交 Payment Inbox 完成、版本化 Order 全快照和 `order.payment.applied` Outbox。本地单节点 replica set 已满足事务要求，不等于生产必须固定三节点。
+
 优点：
 
 - Category/Product 关系和唯一约束适合关系数据库。
@@ -36,7 +38,7 @@ Payment Service 使用独立 PostgreSQL：`CatalogInboxEvent` 按 event ID 去�
 - 名称 `contains` 搜索规模增大后需要专用索引或搜索引擎。
 - 商品列表常用的 `categorySlug/name/price/createdAt` 尚未显式设计组合索引。
 
-### 【当前实现】MongoDB + Mongoose
+### 【改造前基线】MongoDB + Mongoose
 
 订单文档包含 `userId`、email、amount、status、products 数组、address 和 timestamps。
 
@@ -52,6 +54,8 @@ Payment Service 使用独立 PostgreSQL：`CatalogInboxEvent` 按 event ID 去�
 - 没有 Stripe event/session/payment intent ID 唯一约束，无法天然去重。
 - 没有订单号、货币、地址结构化字段、退款和状态历史。
 - `userId`、`createdAt`、`status` 应根据查询建立索引。
+
+**Reliability Update · 2026-09-18：** 当前 `Order` 已改为服务端支付快照投影，包含 `orderId/paymentAttemptId/Stripe IDs/paymentVersion` 唯一边界、支付/退款/争议三个状态、分单位金额、货币、结构化 shipping 和商品选项。`stripePaymentIntentId` 使用 partial unique index。`PaymentEventInbox`、Order 更新与 `OrderOutboxEvent` 在 replica-set transaction 中提交，旧版本快照不会覆盖新版本；履约状态和库存仍未建模。
 
 ## 2. PostgreSQL、MongoDB、Redis 怎么选
 
@@ -266,6 +270,8 @@ FOR UPDATE;
 - Product dispatcher 的 lease 认领和发布确认是短数据库事务；Kafka 网络 I/O 不占用业务事务。发布成功但确认失败只会重复发送，不会丢事件。
 - Payment consumer 在一个事务中写 Inbox 并更新 `StripeCatalogItem` 的期望版本，随后允许提交 offset。Stripe 调用由 worker 在事务外执行，避免长网络调用持锁。
 - Stripe 成功后，worker 通过“仍是当前期望版本”的条件更新确认结果，并在同一事务写 `PaymentOutboxEvent`；旧版本执行结果不能覆盖新版本。
+- Stripe Webhook HTTP handler 只验签并持久化 Inbox；worker 锁定 `CheckoutAttempt` 后更新支付/退款/争议三个正交维度，任何对外投影变化都会递增版本并同事务写 Outbox。
+- Mongo Order worker 用 `paymentVersion` fence 应用完整快照；旧版本不覆盖新订单，但同版本重放仍生成 Ack，以修复“Order 已提交、Ack 丢失”的窗口。
 - 这条链路的原子性只存在于各自 PostgreSQL 内部；跨 Kafka/Stripe 依赖 at-least-once、唯一键、Stripe idempotency key、版本条件和对账收敛。
 
 详见 [Kafka 章节](./05-Kafka事件驱动与可靠性.md)。

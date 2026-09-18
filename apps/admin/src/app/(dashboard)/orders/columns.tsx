@@ -37,10 +37,7 @@ export const columns: ColumnDef<OrderType>[] = [
       />
     ),
   },
-  {
-    accessorKey: '_id',
-    header: 'ID',
-  },
+  { accessorKey: 'orderId', header: 'Order ID' },
   {
     accessorKey: 'email',
     header: ({ column }) => {
@@ -56,36 +53,82 @@ export const columns: ColumnDef<OrderType>[] = [
     },
   },
   {
-    accessorKey: 'amount',
+    accessorKey: 'amountTotal',
     header: 'Amount',
     cell: ({ row }) => {
-      const amount = parseFloat(row.getValue('amount'))
+      const amount = Number(row.getValue('amountTotal'))
       const formatted = new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: 'USD',
+        currency: row.original.currency.toUpperCase(),
       }).format(amount / 100)
 
       return <div className="font-medium">{formatted}</div>
     },
   },
   {
-    accessorKey: 'status',
-    header: 'Status',
+    accessorKey: 'paymentStatus',
+    header: 'Payment',
     cell: ({ row }) => {
-      const status: string = row.getValue('status')
+      const status: OrderType['paymentStatus'] = row.getValue('paymentStatus')
       return (
         <div
           className={cn(
             `p-1 rounded-md w-max text-xs`,
-            status === 'pending' && 'bg-yellow-500/40',
-            status === 'success' && 'bg-green-500/40',
-            status === 'failed' && 'bg-red-500/40',
+            ['CREATING', 'OPEN', 'PROCESSING'].includes(status) &&
+              'bg-yellow-500/40',
+            status === 'SUCCEEDED' && 'bg-green-500/40',
+            ['FAILED', 'CANCELED', 'EXPIRED'].includes(status) &&
+              'bg-red-500/40',
           )}
         >
           {status}
         </div>
       )
     },
+  },
+  {
+    accessorKey: 'refundStatus',
+    header: 'Refund',
+    cell: ({ row }) => {
+      const status: OrderType['refundStatus'] = row.getValue('refundStatus')
+      return (
+        <div
+          className={cn(
+            'w-max rounded-md p-1 text-xs',
+            status === 'NONE' && 'bg-muted',
+            status === 'PARTIAL' && 'bg-orange-500/40',
+            status === 'FULL' && 'bg-purple-500/40',
+          )}
+        >
+          {status}
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: 'disputeStatus',
+    header: 'Dispute',
+    cell: ({ row }) => {
+      const status: OrderType['disputeStatus'] = row.getValue('disputeStatus')
+      return (
+        <div
+          className={cn(
+            'w-max rounded-md p-1 text-xs',
+            status === 'NONE' && 'bg-muted',
+            status === 'OPEN' && 'bg-red-500/40',
+            status === 'WON' && 'bg-green-500/40',
+            status === 'LOST' && 'bg-red-700/40',
+          )}
+        >
+          {status}
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: 'updatedAt',
+    header: 'Updated',
+    cell: ({ row }) => new Date(row.original.updatedAt).toLocaleString('en-US'),
   },
   {
     id: 'actions',
@@ -103,7 +146,7 @@ export const columns: ColumnDef<OrderType>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(order._id)}
+              onClick={() => navigator.clipboard.writeText(order.orderId)}
             >
               Copy Order ID
             </DropdownMenuItem>

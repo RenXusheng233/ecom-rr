@@ -1,54 +1,106 @@
-# Stripe 商品目录可靠同步迁移手册
+# 商品目录与 Payment → Order 可靠性迁移手册
 
-本文适用于 `feat/catalog-stripe-reliable-sync` 合并到 `main` 后的首次部署。迁移目标是上线 Product Outbox、独立 payment PostgreSQL、Stripe worker、结果 Outbox 和对账，同时保证现有商品在回填期间仍可结账。
+> Update · 2026-09-18：本手册覆盖 Product → Stripe 目录同步以及 Stripe Webhook → Payment → Order 两条可靠链路。当前项目是本地开发环境、没有正式用户，因此不提供旧支付消息和旧订单文档的双读兼容；启动新版 Order Service 前必须隔离旧 `orders` collection。
 
-## 1. 变更范围与兼容性
+## 1. 本次结构变化
 
-Product PostgreSQL 的迁移是增量变更：
+Product PostgreSQL 保留上一阶段的增量结构：
 
-- `Product` 增加 `catalogVersion`、Stripe 同步状态、已同步版本/时间/错误和结果 revision。
-- 新增 `ProductOutboxEvent` 及相关 enum、索引和 lease/claim 字段。
-- 现有 Product 默认变为 `catalogVersion=1`、`stripeSyncStatus=PENDING`。
+- `Product` 的 catalog version、同步状态和最后错误；
+- `ProductOutboxEvent` 的快照、lease、claim token、重试和发布状态。
 
-Payment PostgreSQL 是新数据库：
+Payment PostgreSQL 在目录表之外新增：
 
-- `CatalogInboxEvent` 用 event ID 去重。
-- `StripeCatalogItem` 保存期望版本、已应用版本、Stripe Product/Price ID、重试、lease 和 fencing 状态。
-- `PaymentOutboxEvent` 可靠发布同步结果。
+- `CheckoutAttempt`：Checkout 幂等键、服务端商品快照、支付/退款/争议状态、Order Ack 版本；
+- `StripeWebhookInboxEvent`：以 Stripe `event.id` 去重并保存处理状态；
+- 泛化的 `PaymentOutboxEvent`：保存 topic、message key、事件类型和完整 envelope；
+- `OrderProjectionInboxEvent`：对 `order.payment.applied` Ack 去重。
 
-旧 `main` 的 Prisma Client 会忽略 Product 数据库中的新增列和表，因此增量 migration 已执行但旧代码短暂运行通常仍兼容；不过旧代码不会写 Outbox。不要在没有完整发布计划时提前迁移生产库。
+Order MongoDB 继续使用 MongoDB，但模型改为：
 
-## 2. 发布前准备
+- `PaymentEventInbox`；
+- 版本化 `Order` 完整投影；
+- `OrderOutboxEvent`；
+- `RejectedPaymentEvent`（30 天 TTL）。
 
-1. 确认代码已经合并并构建出同一 commit 的 product-service 和 payment-service 镜像。
-2. 备份 Product PostgreSQL，并实际确认备份可读取；生产环境按现有平台完成恢复演练。
-3. 创建独立 payment PostgreSQL 数据库和最小权限账号。
-4. 确认 Kafka 可创建/使用以下 topic：
-   - `catalog.product.sync.requested`
-   - `catalog.product.sync.result`
-5. 确认 Stripe 使用预期账户；先在 Test Mode 完成全流程冒烟。
-6. 保持所有已有 `.env` 内容不变，只追加新变量。
+Order 的三项写入使用 MongoDB 多文档事务，因此 MongoDB 必须运行在 replica set 中。本地只需一个 Mongo 节点，不需要三个容器。
 
-## 3. 环境变量
+## 2. 停机、备份和回退原则
 
-Product Service 追加：
+1. 停止 Order、Payment 和 Product Service，避免迁移期间继续写入。
+2. 备份 Product/Payment PostgreSQL 和需要保留的 MongoDB 数据。
+3. 不执行破坏性 down migration。应用回退时保留新增表、列和事件记录；旧代码通常会忽略新增 PostgreSQL 结构，但不会继续可靠链路。
+4. MongoDB 由 standalone 改为 replica set 前，确认容器的数据卷仍挂载到原路径。不要删除卷来“解决”启动问题。
+5. 在新版 Order Service 创建唯一索引前，将旧 `orders` collection 重命名备份；旧文档缺少新版唯一键，不能与新模型共用 collection。
+
+## 3. 本地单节点 MongoDB replica set
+
+以下示例假设 MongoDB 对宿主机暴露 `27017`，replica set 名为 `rs0`。请把容器名、账号和数据卷替换为本机实际配置。
+
+启动参数必须包含：
+
+```text
+mongod --replSet rs0 --bind_ip_all
+```
+
+如果使用 Docker Compose，可在 Mongo 服务中增加：
+
+```yaml
+command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+```
+
+容器启动后只初始化一次：
+
+```bash
+mongosh "mongodb://localhost:27017/admin" --eval \
+  'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+```
+
+检查：
+
+```bash
+mongosh "mongodb://localhost:27017/admin?replicaSet=rs0" --eval \
+  'db.adminCommand({hello:1}).setName'
+```
+
+应输出 `rs0`。Order Service 的 URL 必须追加 `replicaSet=rs0`：
+
+```dotenv
+DATABASE_URL=mongodb://USER:PASSWORD@localhost:27017/orders?authSource=admin&replicaSet=rs0
+```
+
+如果应用运行在另一个 Docker 容器中，`rs.initiate` 的 host 必须是该应用能解析和访问的 Mongo 服务名，而不是盲目使用 `localhost`。
+
+## 4. 环境变量
+
+Product Service：
 
 ```dotenv
 CATALOG_SYNC_ENFORCEMENT=false
 ```
 
-Payment Service 追加：
+Payment Service：
 
 ```dotenv
 PAYMENT_DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/ecom_payment?schema=public
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+CLIENT_APP_URL=http://localhost:3000
+PAYMENT_RECONCILIATION_INTERVAL_MS=900000
 CATALOG_SYNC_ENFORCEMENT=false
 ```
 
-继续保留原有 `DATABASE_URL`、Clerk、Stripe 和 Kafka 配置。不要把真实 secret 提交到 Git。
+只在各应用现有 `.env` 末尾追加缺少的变量，不提交真实 secret。旧拼写 `STRIPE_WEBHOOK_SECRECT` 已移除，不再兼容。
 
-## 4. 在非生产环境验证 migration
+## 5. PostgreSQL migration 与 Prisma Client
 
-使用独立数据库 URL，不要指向共享生产库：
+迁移文件：
+
+- `packages/product-db/prisma/migrations/20260824000000_add_catalog_outbox/migration.sql`
+- `packages/payment-db/prisma/migrations/20260824000000_init_payment_catalog/migration.sql`
+- `packages/payment-db/prisma/migrations/20260918000000_add_payment_order_reliability/migration.sql`
+
+先在独立本地/测试数据库执行：
 
 ```bash
 DATABASE_URL=postgresql://... pnpm --filter @repo/product-db db:generate
@@ -58,111 +110,110 @@ DATABASE_URL=postgresql://... pnpm --filter @repo/product-db db:deploy
 PAYMENT_DATABASE_URL=postgresql://... pnpm --filter @repo/payment-db db:deploy
 ```
 
-随后执行：
+迁移是增量的，不删除 Product/Payment 现有目录数据。MongoDB 没有自动 migration 命令；新版 Order Service 启动时会显式创建索引，并在索引冲突或事务探针失败时停止。
+
+旧 `orders` 文档缺少 `orderId`、`paymentAttemptId` 和 Stripe IDs。多个旧文档会让新版唯一索引因重复的 missing/null key 构建失败。因此，在第一次启动新版 Order Service 前，必须先将旧 collection 重命名备份（推荐，可回退），或在确认无需数据后删除。示例中的数据库名和备份名需要按本地环境替换：
+
+```javascript
+// Run in mongosh against the Order database before starting the new service.
+db.orders.renameCollection('orders_legacy_pre_reliability_20260918')
+```
+
+如果 `orders` 不存在则无需操作；如果备份名已存在，请换一个尚未使用的名字。新版服务随后会创建新的空 `orders` collection。旧备份不会被新版代码读取。
+
+## 6. Kafka topics
+
+保留目录 topics，并新增支付订单 topics：
+
+```text
+catalog.product.sync.requested
+catalog.product.sync.result
+payment.order.lifecycle
+order.payment.applied
+```
+
+本地 Kafka 开启自动创建时，服务首次订阅/发布可创建 topic；显式创建示例：
 
 ```bash
-pnpm test:catalog-sync
-pnpm check-types
-pnpm lint
-PAYMENT_DATABASE_URL=postgresql://... pnpm build
+kafka-topics --bootstrap-server localhost:9092 --create \
+  --topic payment.order.lifecycle --partitions 3 --replication-factor 1
+kafka-topics --bootstrap-server localhost:9092 --create \
+  --topic order.payment.applied --partitions 3 --replication-factor 1
 ```
 
-验证 Product 新字段默认值、两张 Outbox/Inbox 流转、worker lease 重新认领以及重复事件不会重复产生 Stripe 副作用。
+生产环境按 broker 数量调整 replication factor，并保证同一 `orderId` 作为 key 进入同一 partition。
 
-## 5. 生产分阶段发布
+## 7. 目录回填与启用顺序
 
-### 阶段 A：扩展 schema
-
-先执行 migration，不启用强制可售过滤：
-
-```bash
-DATABASE_URL=postgresql://... pnpm --filter @repo/product-db db:deploy
-PAYMENT_DATABASE_URL=postgresql://... pnpm --filter @repo/payment-db db:deploy
-```
-
-迁移文件：
-
-- `packages/product-db/prisma/migrations/20260824000000_add_catalog_outbox/migration.sql`
-- `packages/payment-db/prisma/migrations/20260824000000_init_payment_catalog/migration.sql`
-
-### 阶段 B：部署双 worker
-
-部署 product-service 和 payment-service，确保两边都是：
-
-```dotenv
-CATALOG_SYNC_ENFORCEMENT=false
-```
-
-检查：
-
-- 两个服务成功连接 Kafka。
-- Payment Service 成功连接 payment PostgreSQL。
-- 新建商品可产生 requested event、Stripe 对象和 result event。
-- worker 日志没有持续数据库、Kafka 或 Stripe 错误。
-
-### 阶段 C：回填现有商品
-
-只运行一次回填命令；脚本按商品 ID/版本/操作唯一键幂等：
+1. 保持 Product/Payment 的 `CATALOG_SYNC_ENFORCEMENT=false`。
+2. 启动 Kafka、两个 PostgreSQL、Mongo replica set。
+3. 确认旧 `orders` 已重命名/清理，再部署或启动新版 Order Service，使 Mongo indexes、事务探针、Inbox worker 和 Outbox worker 就绪。
+4. 部署/启动新版 Payment Service，使 Webhook Inbox、状态 worker、Payment Outbox 和对账任务就绪。
+5. 启动 Product Service 并回填目录：
 
 ```bash
 DATABASE_URL=postgresql://... pnpm --filter product-service catalog-sync:backfill
 ```
 
-重复执行不会创建同版本的第二条 Product Outbox，但仍应记录每次执行时间和结果。
-
-### 阶段 D：对账并清零
-
-使用管理员身份检查：
+6. 以管理员身份检查并对账：
 
 ```text
 GET  /catalog-sync/summary
-GET  /catalog-sync/:productId
-POST /catalog-sync/:productId/retry
 POST /catalog-sync/reconcile
+GET  /payment-order-sync/summary
+POST /payment-order-sync/reconcile
+GET  /order-projection-sync/summary
 ```
 
-进入下一阶段前必须满足：
+7. 确认目录无长期 `PENDING/PROCESSING/FAILED` 和已知 drift 后，再把 Product/Payment 的 `CATALOG_SYNC_ENFORCEMENT` 改为 `true`。
 
-- Product Outbox 无长期积压。
-- payment ledger 无 `PENDING`、`PROCESSING` 或 `FAILED`。
-- 首次全量对账 `drifted=0`。
-- 已知 managed orphan 已归档；无法确认归属的历史 Stripe 对象只有报告、没有自动修改。
-- 使用 Stripe Test Mode 验证创建、改名、改价、归档、429/网络恢复和手工漂移修复。
+## 8. Stripe Test Mode 配置和冒烟
 
-### 阶段 E：开启强制可售
+Webhook endpoint 指向：
 
-把 product-service 和 payment-service 的配置同时改为：
-
-```dotenv
-CATALOG_SYNC_ENFORCEMENT=true
+```text
+POST https://<ngrok-host>/webhooks/stripe
 ```
 
-滚动发布后确认：
+至少订阅：
 
-- 公共列表/详情只返回 `SYNCED` 且版本一致的商品。
-- Checkout 只使用 payment DB 中已确认的 Stripe Price ID。
-- 未同步商品返回 HTTP 409 和 `CATALOG_SYNC_PENDING`。
-- Admin 仍能看到全部状态和最后错误。
+```text
+checkout.session.completed
+checkout.session.async_payment_succeeded
+checkout.session.async_payment_failed
+checkout.session.expired
+payment_intent.succeeded
+payment_intent.payment_failed
+payment_intent.canceled
+charge.refunded
+charge.dispute.created
+charge.dispute.closed
+```
 
-## 6. 回退策略
+人工冒烟顺序：
 
-应用异常但 schema 正常时：
+1. 创建/改价商品，确认目录两侧最终 `SYNCED`。
+2. Client 发起 Checkout，确认相同 `Idempotency-Key` 重试只得到一个 Session。
+3. 完成 Test Mode 支付，确认 Webhook Inbox 为 `PROCESSED`。
+4. 确认 Payment Outbox 发布 `payment.order.lifecycle`，Mongo Order 被创建。
+5. 确认 Order Outbox 发布 Ack，`CheckoutAttempt.orderAppliedVersion == version` 且 return 页显示 `CONFIRMED`。
+6. 重投同一个 Stripe event/Kafka event，确认没有重复订单且版本不倒退。
+7. 暂停 Kafka 或 Order Service，再恢复并确认 lease/retry/对账最终收敛。
 
-1. 先把两边 `CATALOG_SYNC_ENFORCEMENT=false`，恢复 legacy server-side Stripe Price fallback。
-2. 停止 catalog worker/dispatcher 的新实例，保留数据库记录用于排查。
-3. 回退到上一个应用版本；新增表和列保持不动，不执行破坏性 down migration。
-4. 修复后重新部署 worker、重跑 backfill 和 reconcile，再开启 enforcement。
+## 9. 自动验证
 
-如果 migration 本身失败，停止发布并使用数据库平台的事务/备份恢复流程。不要手工删除 enum、列或 Outbox 记录；这些操作可能让已发布 Kafka 事件失去审计依据。
+```bash
+pnpm test:catalog-sync
+pnpm test:payment-order
+pnpm check-types
+pnpm lint
+PAYMENT_DATABASE_URL=postgresql://... pnpm build
+```
 
-## 7. 发布后观察
+Node 测试不访问 Stripe。设置独立 `TEST_PAYMENT_DATABASE_URL` / `TEST_ORDER_DATABASE_URL` 时，再执行真实 PostgreSQL 回滚和 Mongo replica-set 事务验证。
 
-至少观察一个完整业务高峰和 24 小时自动对账周期：
+## 10. 回退与观察
 
-- Product/Payment Outbox pending 数量和最老事件年龄。
-- Catalog worker retry、FAILED、lease reclaim 和 stale invalidation。
-- Kafka consumer lag、rebalance 和 publish error。
-- Stripe 429、5xx、timeout 和 reconciliation drift。
-- Checkout 409 `CATALOG_SYNC_PENDING` 比例。
+应用异常时停止新 worker，保留 Inbox/Outbox 行用于重放；回退应用版本但不删除新 schema。恢复后先运行 reconcile，再开放 Checkout。
 
-Stripe Webhook → Order Service 的可靠性不在本次迁移范围，后续工作见根目录 [TODO.md](./TODO.md)。
+持续观察：Webhook 验签/落库失败、Inbox 最老 pending 时间、Kafka lag、两侧 Outbox 积压、FAILED 重试数、Stripe 429/5xx、已支付但未收到 Order Ack 的数量。当前仍未覆盖库存预占、主动退款命令、履约 Saga、retry topic/DLQ 和生产级指标告警，见 [TODO.md](./TODO.md)。
