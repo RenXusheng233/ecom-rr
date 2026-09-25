@@ -2,9 +2,9 @@
 
 这套资料面向拥有 5 年以上前端经验、正在补齐 Node.js 后端能力的工程师。目标不是背完技术百科，而是能围绕当前项目讲清楚：**做了什么、为什么这样设计、哪里还不够、生产环境如何改进**。
 
-> **Reliability Update · 2026-08-24**
->
-> **Reliability Update · 2026-09-18：** 当前分支已完成 Product → Stripe 目录同步和 Stripe Webhook → Payment → Order 两条可靠性链路。本目录的 `00`、`04`、`05`、`07`、`08` 均保留改造前基线并追加当前实现标注，便于面试时讲清 before/after；库存预占、履约 Saga、retry topic/DLQ 和生产监控仍是下一阶段。
+> **当前分支校对 · 2026-09-25：** 本手册以当前代码为准。Product → Stripe 目录同步，以及 Stripe Webhook → Payment → Order → Ack 已有持久化与恢复机制；库存预占、履约 Saga、独立 retry topic/DLQ 和生产监控仍是下一阶段。历史方案只用于说明改造动机。
+
+先读 [项目总览与迭代规划](../项目总览与迭代规划.md)，再按专题回到关键代码。
 
 总学习时间约 **21 小时**，建议 7 天完成。
 
@@ -15,7 +15,7 @@
 - **【当前实现】**：可以在仓库代码中验证，面试时可以作为已完成工作描述。
 - **【生产建议】**：项目尚未实现，但应能说明设计方案与优先级。
 - **【面试表达】**：可直接练习的回答骨架，理解后用自己的语言复述。
-- **Reliability Update · 日期**：本次可靠性改造后的增量事实；标记附近的“原始认识”用于保留改造前分析。
+- **【历史背景】**：改造前的实现或风险，只用于解释设计动机。
 
 不要把“生产建议”说成项目已有能力。高级工程师的可信度，往往来自准确说明边界，而不是堆叠名词。
 
@@ -73,9 +73,9 @@
 - 后端：Express 商品服务、Fastify 订单服务、Hono 支付服务、NestJS 认证/用户服务。
 - 数据：Product PostgreSQL + Prisma 存商品与 Product Outbox；独立 Payment PostgreSQL + Prisma 存目录账本、CheckoutAttempt、Webhook Inbox、Payment Outbox 和 Order Ack Inbox；MongoDB replica set + Mongoose 存 Payment Inbox、版本化 Order 和 Ack Outbox。
 - 外部服务：Clerk、Stripe、Cloudinary。
-- 异步通信：KafkaJS，三个本地 KRaft Broker；商品目录使用 `catalog.product.sync.requested` / `catalog.product.sync.result`，支付订单链仍使用 `payment.successful`。
+- 异步通信：KafkaJS，本地三个 KRaft Broker；商品目录使用 `catalog.product.sync.requested` / `catalog.product.sync.result`，支付订单使用 `payment.order.lifecycle` / `order.payment.applied`。
 - 商品目录链路已实现 Outbox/Inbox、message key、版本防乱序、Stripe 幂等重试、同步结果和定期对账。
-- 支付订单链路已实现 Stripe event ID 去重、Payment/Order 双向 Outbox/Inbox、完整快照版本栅栏、Ack 与对账。
-- 当前未使用 Redis；仍未实现库存/SKU、主动退款/履约 Saga、retry topic/DLQ 和生产级可观测性。
+- 支付订单链路已实现 Stripe event ID 去重、Payment/Order 双向 Outbox/Inbox、完整快照版本栅栏、Ack、查询和定期对账；首次支付失败不创建 Order。
+- 当前未使用 Redis；仍未实现库存/SKU、主动退款/履约 Saga、独立 retry topic/DLQ 和生产级可观测性。Order 坏事件可持久化为 rejected record；目录与 Ack 的已解析无效载荷主要记日志，目录无法解析的 JSON 会继续重试并可能阻塞分区。
 
-最后更新：2026-08-24。
+最后按代码校对：2026-09-25。

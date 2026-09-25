@@ -21,6 +21,7 @@
 - 表单：React Hook Form + Zod。
 - 图片和字体：`next/image`、`next/font`。
 - SEO：根布局静态 `metadata`，商品详情使用 `generateMetadata`。
+- 支付返回页：`PaymentReturnStatus.tsx` 轮询 `/sessions/:session_id`，区分支付成功但订单 Ack 未到的处理中状态；确认后才清空购物车。
 
 ### 【当前实现】Admin
 
@@ -230,7 +231,7 @@ SEO 不是“用了 SSR 就完成”。搜索表现还依赖内容质量、内�
 - Redux Toolkit：约束、DevTools、中间件与团队可预测性更强；简单业务样板更多。
 - React Query：解决远程服务端状态、缓存、重试和失效，不应被当作购物车 UI store。
 
-**当前购物车风险：** `localStorage` 中的名称、价格仅适合显示，支付服务必须重新获取可信价格；真实下单还应服务端校验商品是否存在、SKU、库存与可售状态。
+**当前购物车边界：** `localStorage` 中的名称、价格仅适合显示。支付服务现已按商品 ID 从已同步目录账本读取可信 Price、校验所选 size/color，并由服务端计算金额；尚无 SKU 库存与预占，也未对实际可售库存做验证。见 `apps/payment-service/src/utils/checkoutCatalog.ts`。
 
 ## 9. Tailwind CSS 与 shadcn/ui
 

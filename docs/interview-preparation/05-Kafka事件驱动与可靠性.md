@@ -1,12 +1,12 @@
 # 05｜Kafka 事件驱动与可靠性
 
-> **Reliability Update · 2026-09-18：** 商品目录和 Payment → Order Kafka 链路均已完成可靠性改造。本章保留 `payment.successful` 与 fire-and-forget 风险作为 before 基线；当前使用 `payment.order.lifecycle` / `order.payment.applied`、稳定 envelope、同订单 key、双向 Inbox/Outbox 和版本 fence。
+> **当前分支校对 · 2026-09-25：** 当前主链路使用两个目录 topic 和 `payment.order.lifecycle` / `order.payment.applied`。原先直接发布事件的双写风险是改造动机；当前边界与剩余缺口见第 4～5 节。
 
 ## 学习目标
 
 - 讲清 Topic、Partition、Consumer Group、Offset 和 Rebalance。
 - 理解消息顺序、三种交付语义和“Exactly-once”的边界。
-- 能为项目补幂等、重试、DLQ、事件契约与事务 Outbox。
+- 能说明项目已有的幂等、数据库重试、事件契约与事务 Outbox，以及待补的独立 retry topic/DLQ。
 - 能分析支付成功后订单未创建、重复创建等故障。
 
 建议耗时：**2.5 小时**。
@@ -21,17 +21,7 @@
 
 ### 事件流
 
-#### 原始拓扑（改造前/遗留链路）
-
-| Topic                | Producer                | Consumer        | 作用                         |
-| -------------------- | ----------------------- | --------------- | ---------------------------- |
-| `product.created`    | Product Service         | Payment Service | 在 Stripe 创建商品和默认价格 |
-| `product.deleted`    | Product Service         | Payment Service | 删除 Stripe 商品             |
-| `payment.successful` | Payment Service Webhook | Order Service   | 在 MongoDB 创建订单          |
-
-共享包 `@repo/kafka` 封装 `createKafkaClient/createProducer/createConsumer`。事件当前使用 JSON，无 schema registry 和显式版本。
-
-#### Reliability Update · 2026-08-24（当前商品目录拓扑）
+#### 【当前实现】事件拓扑
 
 | Topic                            | Producer                  | Consumer                        | 可靠性边界                                                          |
 | -------------------------------- | ------------------------- | ------------------------------- | ------------------------------------------------------------------- |
@@ -40,7 +30,7 @@
 | `payment.order.lifecycle`        | Payment Outbox dispatcher | Order Payment Inbox             | `orderId` 为 key；完整快照；event ID 去重；aggregate version 防乱序 |
 | `order.payment.applied`          | Order Outbox dispatcher   | Payment Ack Inbox               | `orderId` 为 key；确认已应用版本和 Order 是否存在                   |
 
-旧 `product.created` / `product.deleted` 常量仍可能存在于共享契约中，但不再承担当前商品目录同步主链路。Catalog 事件具有 `eventId`、商品 ID、商品版本、操作和完整期望快照；Producer 已支持 message key。独立的事件 schema version 仍属于契约治理待办。
+共享包 `@repo/kafka` 封装 `createKafkaClient/createProducer/createConsumer`。旧 `product.created` / `product.deleted` 常量仍在 `constants.ts`，但不承担当前主链路；`payment.successful` 已不是当前 topic。Catalog 事件有 `eventId`、商品 ID/版本、操作和期望快照，尚无独立 schema version；Payment/Order envelope 已有 `schemaVersion: 1`、event ID、aggregate version、correlation/causation ID。当前仍用 JSON，没有 Schema Registry/契约兼容 CI。
 
 ## 2. 核心模型
 
@@ -55,9 +45,7 @@
 
 相同 key 通常路由到相同 partition，因此同一业务实体可保持相对顺序。例如商品事件用 `productId`，订单事件用 `orderId`。
 
-原始 `@repo/kafka` 只发送 `value`，没有 key。分区数大于 1 时，同一商品的 created/deleted 事件不一定进入同一分区，顺序无法依赖。
-
-**Reliability Update · 2026-08-24：** Producer 现在支持可选 message key，两个 catalog topic 都使用 `productId`。这提供同商品分区内相对顺序，但正确性仍不依赖顺序：Payment ledger 和 Product 结果消费者都用版本条件拒绝过期事件。
+Producer 支持可选 message key。两个 catalog topic 用 `productId`，支付生命周期和 Ack 用 `orderId`。同实体通常进入同一 partition，但正确性仍不只依赖到达顺序：目录结果检查版本与 revision，Order 投影检查 aggregate version。
 
 ### Replica、Leader、ISR
 
@@ -98,7 +86,7 @@ Offset 是 consumer group 在每个 partition 的消费位置。提交 offset �
 
 **【面试表达】**
 
-> 我不会笼统承诺端到端 exactly-once。项目更适合 at-least-once + 幂等：支付事件带唯一 eventId，订单库建立唯一索引；重复消费先查处理记录或用唯一插入阻止重复副作用，成功后再提交 offset。
+> 我不会笼统承诺端到端 exactly-once。项目采用 at-least-once + 幂等：Stripe Webhook 用 `event.id` 入 Payment Inbox，支付状态与 Outbox 同事务；Order 把 event ID Inbox、全快照投影和 Ack Outbox 放进 Mongo transaction。Kafka 重放或 worker 崩溃后可重试，旧版本不会覆盖新状态。
 
 ## 4. Producer 可靠性
 
@@ -111,29 +99,22 @@ Offset 是 consumer group 在每个 partition 的消费位置。提交 offset �
 - Retry：只重试瞬时错误，并设置指数退避与上限；永久验证错误不应无限重试。
 - Delivery timeout：避免请求无限等待。
 
-### 当前项目风险
+### 当前项目落地
 
-Product Controller 和 Stripe Webhook 调用 `producer.send(...)` 时没有 `await`。HTTP 已返回或进程崩溃时，发送失败可能不被业务感知。
-
-仅仅加 `await` 仍不能解决“数据库成功、Kafka 失败”的双写窗口。可靠方案是 Outbox。
-
-> **更新说明：** 上述 Product Controller 与旧 Webhook 直接发布风险均是改造前基线。当前商品写入与 Product Outbox 同事务；Webhook 先落 Inbox，支付状态与 Payment Outbox 同事务；Order Inbox、Order 投影与 Ack Outbox 使用 Mongo transaction。
+Product 写操作与 Product Outbox 同事务；Stripe Webhook 先落 Payment Inbox 再返回 2xx；支付状态与 Payment Outbox 同事务；Order Inbox、订单投影与 Ack Outbox 使用 Mongo transaction。`await producer.send(...)` 本身无法消除本地数据库与 Kafka 的双写窗口，Outbox worker 在发送成功、标记已发布前崩溃时仍会重发，所以消费端仍须幂等。
 
 ## 5. Consumer 可靠性与幂等
 
-### 当前实现行为
+### 【当前实现】消费与剩余边界
 
-- `fromBeginning: true`：新 group 会从最早消息读取，适合本地演示；生产误换 group ID 可能重放全部历史。
-- `eachMessage` 使用默认自动 offset 管理。
-- 共享 consumer 捕获 handler 异常后只打印，不再抛出。框架可能认为处理成功并提交 offset，导致失败消息永久跳过。
-- `createStripeProduct/deleteStripeProduct` 内部捕获错误并返回 error，也不会触发重试。
-- 没有 event ID、幂等表、唯一约束、重试 Topic 或 DLQ。
-
-> **Reliability Update · 2026-09-18：** 上述吞错行为描述旧 consumer。Catalog 与新 lifecycle consumer 都使用异常重抛策略；合法消息先持久化 Inbox 再提交 offset，外部/业务处理交给可 lease 重领的 worker。Order 对合法事件持久化失败会重抛；坏 JSON/坏契约保存为带 Kafka coordinate 的拒绝记录后跳过，避免 poison message 永久阻塞 partition。两条路径仍未引入独立 retry topic/DLQ。
+- `fromBeginning: true`：新 group 会从最早消息读取；生产误换 group ID 可能重放历史。`eachMessage` 使用 KafkaJS 的自动 offset 管理，因此 handler 成功返回前先要持久化 Inbox。
+- `packages/kafka/src/consumer.ts` 默认 `errorPolicy: 'skip'` 会记录并吞掉异常；**当前目录、生命周期与 Ack 订阅均显式设置 `errorPolicy: 'retry'`**，数据库持久化失败会重抛，避免误提交 offset。新增订阅时必须显式选择策略。
+- Order 对坏 JSON/坏契约持久化 `RejectedPaymentEvent`，成功留存后跳过；写 rejected record 失败仍重试。Payment 的已解析无效 Catalog/Ack 载荷，以及 Product 的无效目录结果，目前主要记录日志后跳过；目录 topic 没有 `invalidMessageHandler`，无法解析的 JSON 会抛错重试并可能阻塞分区。它们尚无统一的持久化隔离与人工处理入口。
+- 合法事件分别按 Catalog event ID、Payment lifecycle event ID 或 Ack event ID 去重，业务处理交给可 lease 重领的 worker；失败任务保存在数据库并可受控重置。尚无独立 retry topic/DLQ。
 
 ### 幂等消费者模式
 
-事件 envelope：
+通用设计示例（当前 Payment/Order 的实际契约见 `packages/types/src/payment-order.ts`；Catalog 契约见 `catalog-sync.ts`）：
 
 ```ts
 type IntegrationEvent<T> = {
@@ -159,7 +140,7 @@ type IntegrationEvent<T> = {
 ### 自然幂等
 
 - Stripe 创建商品使用稳定 product ID，可配合查询/更新策略。
-- 支付订单以 `stripeEventId` 或 `checkoutSessionId` 建唯一索引。
+- 支付入口以 Stripe `event.id` 入 Inbox；`CheckoutAttempt` 对 user/key、order ID 和 Stripe IDs 建唯一约束；Order 对 order/attempt/session ID 建唯一索引。
 - 删除不存在资源可视为成功。
 
 自然幂等比“先查再写”可靠；并发下最终由唯一约束裁决。
@@ -177,10 +158,10 @@ type IntegrationEvent<T> = {
 不要在 consumer 内无限快速 retry 阻塞 partition。常见方式：
 
 ```text
-payment.successful
-  → payment.successful.retry.1m
-  → payment.successful.retry.10m
-  → payment.successful.dlq
+payment.order.lifecycle
+  → payment.order.lifecycle.retry.1m
+  → payment.order.lifecycle.retry.10m
+  → payment.order.lifecycle.dlq
 ```
 
 记录 `attempt`、原 topic/partition/offset、异常类型和时间。DLQ 需要告警、查看、修复与安全重放工具；有 DLQ 不等于问题被解决。
@@ -236,7 +217,7 @@ Publisher 可轮询，也可用 CDC（如 Debezium）捕获 WAL/change log。即
 - 消费者不应直接依赖生产者内部数据库 Entity。
 - 敏感信息最小化；Kafka retention 会让数据长期存在。
 
-当前 `payment.successful` 带 email/address 等个人信息，生产环境需评估加密、访问控制、保留期与日志脱敏。
+当前 `payment.order.lifecycle` 全快照含 email、shipping 等个人信息，生产环境需评估最小化、加密、访问控制、保留期与日志脱敏。
 
 ## 9. 运行与可观测性
 
@@ -253,11 +234,11 @@ Publisher 可轮询，也可用 CDC（如 Debezium）捕获 WAL/change log。即
 
 ## 10. 当前项目的改进优先级
 
-> **Reliability Update · 2026-09-18：** 完成标记只代表当前分支代码，不代表生产环境已完成迁移、故障演练和 Test Mode 冒烟。
+> 完成标记只代表当前分支代码，不代表生产环境已完成迁移、故障演练和 Stripe Test Mode 冒烟。
 
 ### P0：正确性
 
-1. [x] Catalog 事件加入唯一 ID、aggregate ID、商品版本和 message key；独立 schema version 仍待补充。
+1. [x] Catalog 事件加入唯一 event ID、商品 ID、商品版本和 message key；独立 schema version 仍待补充。
 2. [x] Catalog 发布由 Outbox dispatcher 等待结果并持久化错误，不静默丢失。
 3. [x] Webhook 以 Stripe event ID 去重，Order Inbox/Order 唯一索引建立幂等边界。
 4. [x] lifecycle consumer 数据库失败重抛；坏消息持久化 rejected record 后跳过。
@@ -286,7 +267,7 @@ Publisher 可轮询，也可用 CDC（如 Debezium）捕获 WAL/change log。即
 
 ### 消费者写数据库成功但 offset 未提交会怎样？
 
-> 重启后消息会再次投递。若订单表按 eventId/sessionId 有唯一约束，重复处理可识别并安全返回；没有幂等则可能重复订单。这是 at-least-once 的典型窗口。
+> 重启后消息会再次投递。当前 Order Inbox 对 event ID 建唯一索引，Order 对 order/attempt/session ID 建唯一索引，并以 aggregate version 拒绝旧快照；重复投递可安全识别。若缺少这些约束，at-least-once 的重放窗口就可能产生重复订单。
 
 ### 为什么有 Kafka 事务还需要 Outbox？
 
@@ -294,10 +275,10 @@ Publisher 可轮询，也可用 CDC（如 Debezium）捕获 WAL/change log。即
 
 ## 12. 自测清单
 
-- [ ] 画出两个 Catalog Topic 与 `payment.successful` 的生产者和消费者，并说明遗留 product topic 的状态。
+- [ ] 画出四个当前 Topic 的生产者、消费者和 Inbox/Outbox，并说明遗留 product topic 的状态。
 - [ ] 解释 partition、key、consumer group 和 offset。
 - [ ] 对比三种交付语义，说明 exactly-once 范围。
-- [ ] 找出当前 consumer 吞异常的后果。
+- [ ] 解释 `errorPolicy: 'retry'`、默认 `skip` 与坏消息留存策略的区别。
 - [ ] 设计 payment event 幂等表/唯一索引。
 - [ ] 画出 Outbox 与重试/DLQ 流程。
 - [ ] 说出 6 个 Kafka 生产指标。

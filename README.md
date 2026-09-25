@@ -2,6 +2,8 @@
 
 A full-stack e-commerce platform built with a microservices architecture. Includes a customer-facing storefront, an admin dashboard, and four independent backend services connected via Kafka.
 
+For a current Chinese architecture and code map, see [项目总览与迭代规划](./docs/项目总览与迭代规划.md). Interview notes are under [docs/interview-preparation](./docs/interview-preparation/README.md).
+
 ## Architecture
 
 ```

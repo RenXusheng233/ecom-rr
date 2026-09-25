@@ -1,8 +1,6 @@
 # 04｜数据库选型、建模、事务与 ORM
 
-> **Reliability Update · 2026-08-24**
->
-> **Reliability Update · 2026-09-18：** 当前分支除 Product/Payment 两套 PostgreSQL 目录模型外，还增加 CheckoutAttempt、Stripe Webhook Inbox、Payment lifecycle Outbox、Order Ack Inbox，以及 Mongo Payment Inbox/Order/Outbox 事务边界。原有数据库理论保持不变，更新区块用于区分改造前风险与当前事实。
+> **当前分支校对 · 2026-09-25：** Product/Payment 是两套 PostgreSQL，Order 使用要求 replica set 的 MongoDB。本章的历史订单模型只用于说明改造前后的差异，模型字段以三个数据库包中的 schema 为准。
 
 ## 学习目标
 
@@ -19,11 +17,11 @@
 
 `Product` 包含名称、描述、整数价格、sizes/colors 数组、images JSON、分类外键；`Category.slug` 唯一。
 
-**Reliability Update · 2026-08-24：** `Product` 还包含单调递增的 `catalogVersion`、`stripeSyncStatus`、`stripeSyncedVersion`、`stripeSyncedAt` 和 `stripeSyncError`。同库的 `ProductOutboxEvent` 保存事件 ID、商品 ID、版本、UPSERT/ARCHIVE 完整期望快照、发布状态、重试、lease 和错误。
+`Product` 还包含单调递增的 `catalogVersion`、`stripeSyncStatus`、`stripeSyncedVersion`、`stripeSyncedAt`、`stripeSyncResultRevision` 和 `stripeSyncError`。同库的 `ProductOutboxEvent` 保存事件 ID、商品 ID、版本、UPSERT/ARCHIVE 期望快照、发布状态、重试、lease 和错误。
 
 Payment Service 使用独立 PostgreSQL：`CatalogInboxEvent` 按 event ID 去重，`StripeCatalogItem` 保存期望/已应用版本及 Stripe Product/Price ID，`PaymentOutboxEvent` 可靠发布同步结果。Product PostgreSQL 仍是商品期望状态的唯一事实源，Payment DB 是 Stripe 已应用状态与 Checkout Price 的本地账本。
 
-**Payment → Order Update · 2026-09-18：** Payment DB 还保存 `CheckoutAttempt`、按 Stripe `event.id` 唯一的 `StripeWebhookInboxEvent` 和按 Ack event ID 唯一的 `OrderProjectionInboxEvent`。支付状态更新、aggregate version 递增和生命周期 Outbox 在同一 PostgreSQL 事务提交。Order 继续使用 MongoDB，但要求 replica set；worker 在同一 Mongo transaction 提交 Payment Inbox 完成、版本化 Order 全快照和 `order.payment.applied` Outbox。本地单节点 replica set 已满足事务要求，不等于生产必须固定三节点。
+Payment DB 还保存 `CheckoutAttempt`、按 Stripe `event.id` 唯一的 `StripeWebhookInboxEvent` 和按 Ack event ID 唯一的 `OrderProjectionInboxEvent`。`CheckoutAttempt` 用 `(userId, clientRequestId)` 去重，并记录请求指纹、Stripe IDs、支付/退款/争议状态、版本和 Order 已应用版本。支付状态更新、版本递增和生命周期 Outbox 在同一 PostgreSQL 事务提交。Order 继续使用 MongoDB，但要求 replica set；worker 在同一 Mongo transaction 提交 Payment Inbox 完成、版本化 Order 全快照和 `order.payment.applied` Outbox。本地单节点 replica set 已满足事务要求，不等于生产必须固定三节点。
 
 优点：
 
@@ -55,7 +53,7 @@ Payment Service 使用独立 PostgreSQL：`CatalogInboxEvent` 按 event ID 去�
 - 没有订单号、货币、地址结构化字段、退款和状态历史。
 - `userId`、`createdAt`、`status` 应根据查询建立索引。
 
-**Reliability Update · 2026-09-18：** 当前 `Order` 已改为服务端支付快照投影，包含 `orderId/paymentAttemptId/Stripe IDs/paymentVersion` 唯一边界、支付/退款/争议三个状态、分单位金额、货币、结构化 shipping 和商品选项。`stripePaymentIntentId` 使用 partial unique index。`PaymentEventInbox`、Order 更新与 `OrderOutboxEvent` 在 replica-set transaction 中提交，旧版本快照不会覆盖新版本；履约状态和库存仍未建模。
+**【当前实现】** `Order` 已改为服务端支付快照投影，包含 `orderId/paymentAttemptId/Stripe IDs/paymentVersion` 唯一边界、支付/退款/争议三个状态、分单位金额、货币、结构化 shipping 和商品选项。`stripePaymentIntentId` 使用 partial unique index。`PaymentEventInbox`、Order 更新与 `OrderOutboxEvent` 在 replica-set transaction 中提交，旧版本快照不会覆盖新版本；首次非成功支付事件不创建订单，履约状态和库存仍未建模。
 
 ## 2. PostgreSQL、MongoDB、Redis 怎么选
 
@@ -264,7 +262,7 @@ FOR UPDATE;
 
 更可靠方式：在同一数据库事务写业务数据与 `outbox_events`；后台 publisher 读取未发送事件发布 Kafka，成功后标记。消费者仍必须幂等，因为 publisher 可能在“发送成功但标记前”崩溃。
 
-### Reliability Update · 2026-08-24：当前项目如何落地
+### 【当前实现】本地事务如何落地
 
 - Product 创建、更新与删除把业务变更和 `ProductOutboxEvent` 放进同一 Prisma 事务；更新/删除先锁定商品行，版本在锁内单调递增，避免并发请求生成相同或倒退版本。
 - Product dispatcher 的 lease 认领和发布确认是短数据库事务；Kafka 网络 I/O 不占用业务事务。发布成功但确认失败只会重复发送，不会丢事件。
