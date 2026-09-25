@@ -2,7 +2,7 @@
 
 Order Service consumes versioned `payment.order.lifecycle` snapshots and projects them into MongoDB.
 
-The reliable schema does not read legacy Order documents. Before the first rollout, rename or remove the legacy `orders` collection as described in the root `migration.md`; otherwise the required unique indexes can fail to build.
+The reliable schema does not read legacy Order documents. The fresh local `mongo-order-replset-db` database needs no legacy-data migration. If reusing an older `orders` database, isolate its legacy `orders` collection as described in the root `migration.md`; otherwise the required unique indexes can fail to build.
 
 MongoDB must run as a replica set, including local development. A single-node `rs0` is sufficient. The service fails startup when the Mongo `hello` response has no replica-set name; it never silently falls back to non-transactional writes.
 
@@ -17,11 +17,15 @@ For each valid lifecycle event:
 Malformed messages are retained in `RejectedPaymentEvent` for 30 days. Database failures are rethrown so Kafka does not commit the offset. Payment failures are acknowledged with `orderExists=false`; only a successful payment snapshot creates an Order.
 
 ```dotenv
-DATABASE_URL=mongodb://user:password@localhost:27017/orders?authSource=admin&replicaSet=rs0
+DATABASE_URL="mongodb://admin:YOUR_PASSWORD@localhost:27018/mongo-order-replset-db?authSource=admin&replicaSet=rs0&directConnection=true"
+TEST_ORDER_DATABASE_URL="mongodb://admin:YOUR_PASSWORD@localhost:27018/mongo-order-replset-db-test?authSource=admin&replicaSet=rs0&directConnection=true"
 ```
+
+The test URL must point to a separate database. `dev` loads `apps/order-service/.env`; `packages/order-db/.env` is not loaded by the service. The regular `test` command keeps integration tests optional, while `test:integration` explicitly loads the service `.env` and runs the MongoDB transaction test.
 
 ```bash
 pnpm --filter order-service test
+pnpm --filter order-service test:integration
 pnpm --filter order-service check-types
 pnpm --filter order-service dev
 ```

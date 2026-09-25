@@ -1,8 +1,7 @@
 'use client'
 
-import { ShippingFormInputs } from '@/types'
+import { ShippingFormInputs, toStripeShippingAddress } from '@/types'
 import { useCheckout, PaymentElement } from '@stripe/react-stripe-js/checkout'
-import { ConfirmError } from '@stripe/stripe-js'
 import { CreditCard } from 'lucide-react'
 import { useState } from 'react'
 
@@ -11,11 +10,11 @@ interface CheckoutFormProps {
 }
 
 const CheckoutForm = ({ shippingForm }: CheckoutFormProps) => {
-  const { email, address, city } = shippingForm
+  const { email, phone } = shippingForm
   const checkoutState = useCheckout()
 
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<ConfirmError | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   if (checkoutState.type === 'loading') {
     return <div>Loading...</div>
@@ -25,26 +24,27 @@ const CheckoutForm = ({ shippingForm }: CheckoutFormProps) => {
 
   const handleClick = async () => {
     setLoading(true)
-    await checkoutState.checkout.updateEmail(email)
-    await checkoutState.checkout.updateShippingAddress({
-      name: 'shipping_address',
-      address: {
-        line1: address,
-        line2: city,
-        country: 'US',
-      },
-    })
-
-    const res = await checkoutState.checkout.confirm()
-    if (res.type === 'error') {
-      setError(res.error)
+    setError(null)
+    try {
+      const result = await checkoutState.checkout.confirm({
+        email,
+        phoneNumber: phone,
+        shippingAddress: toStripeShippingAddress(shippingForm),
+      })
+      if (result.type === 'error') setError(result.error.message)
+    } catch {
+      setError('Unable to confirm payment. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
     <form className="flex flex-col gap-6">
       <PaymentElement options={{ layout: 'accordion' }} />
+      <p className="text-sm font-medium text-gray-800">
+        Final amount: {checkoutState.checkout.total.total.amount}
+      </p>
       <button
         type="button"
         disabled={loading}
@@ -55,11 +55,13 @@ const CheckoutForm = ({ shippingForm }: CheckoutFormProps) => {
                    focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <CreditCard className="h-4 w-4" />
-        {loading ? 'Processing...' : 'Pay'}
+        {loading
+          ? 'Processing...'
+          : `Pay ${checkoutState.checkout.total.total.amount}`}
       </button>
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-          {error.message}
+          {error}
         </div>
       )}
     </form>

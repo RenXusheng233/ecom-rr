@@ -2,10 +2,13 @@ import { auth } from '@clerk/nextjs/server'
 import { OrderType } from '@repo/types'
 import { ArrowRight, CalendarDays, Package2, ShoppingBag } from 'lucide-react'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 const fetchOrders = async () => {
-  const { getToken } = await auth()
+  const { userId, getToken } = await auth()
+  if (!userId) redirect('/sign-in?redirect_url=%2Forders')
   const token = await getToken()
+  if (!token) redirect('/sign-in?redirect_url=%2Forders')
 
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_ORDER_SERVICE_URL}/user-orders`,
@@ -16,7 +19,12 @@ const fetchOrders = async () => {
     },
   )
 
+  if (res.status === 401 || res.status === 403) {
+    redirect('/sign-in?redirect_url=%2Forders')
+  }
+  if (!res.ok) throw new Error('Failed to load orders')
   const orders: OrderType[] = await res.json()
+  if (!Array.isArray(orders)) throw new Error('Invalid orders response')
   return orders
 }
 

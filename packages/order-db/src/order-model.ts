@@ -36,6 +36,7 @@ const ShippingSchema = new Schema(
     state: { type: String, default: null },
     postalCode: { type: String, default: null },
     country: { type: String, required: true },
+    phone: { type: String, default: null },
   },
   { _id: false },
 )

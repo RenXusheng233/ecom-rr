@@ -70,6 +70,7 @@ export const shippingSnapshotSchema = z
     state: z.string().nullable(),
     postalCode: z.string().nullable(),
     country: z.string().min(1),
+    phone: z.string().nullable().optional(),
   })
   .strict()
 

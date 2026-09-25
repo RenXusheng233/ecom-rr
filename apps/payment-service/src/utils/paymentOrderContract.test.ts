@@ -35,6 +35,7 @@ const validPaymentEvent = {
       state: 'TX',
       postalCode: '78701',
       country: 'US',
+      phone: '+15125550123',
     },
     items: [
       {

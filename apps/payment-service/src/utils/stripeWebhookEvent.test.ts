@@ -18,7 +18,10 @@ test('normalizes an unpaid completed Checkout as processing with its snapshot', 
         currency: 'usd',
         client_reference_id: 'user-1',
         metadata: { paymentAttemptId: 'attempt-1' },
-        customer_details: { email: 'buyer@example.com' },
+        customer_details: {
+          email: 'buyer@example.com',
+          phone: '+15125550123',
+        },
         collected_information: {
           shipping_details: {
             name: 'Buyer',
@@ -46,6 +49,7 @@ test('normalizes an unpaid completed Checkout as processing with its snapshot', 
   assert.equal(normalized.stripeCheckoutSessionId, 'cs_1')
   assert.equal(normalized.stripePaymentIntentId, 'pi_1')
   assert.equal(normalized.shipping?.postalCode, '78701')
+  assert.equal(normalized.shipping?.phone, '+15125550123')
 })
 
 test('treats a no-payment-required Checkout as successful', () => {

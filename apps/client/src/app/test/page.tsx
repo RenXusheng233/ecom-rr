@@ -1,38 +1,40 @@
 import { auth } from '@clerk/nextjs/server'
+import { notFound } from 'next/navigation'
 
 const TestPage = async () => {
+  if (process.env.NODE_ENV !== 'development') notFound()
+
   const { getToken } = await auth()
   const token = await getToken()
-  console.log('token:', token)
+  if (!token) notFound()
 
-  // Product
-  const resProduct = await fetch('http://localhost:8000/test', {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-  const dataProduct = await resProduct.json()
-  console.log(dataProduct)
+  const services = [
+    { name: 'Product', url: 'http://localhost:8000/test' },
+    { name: 'Order', url: 'http://localhost:8001/test' },
+    { name: 'Payment', url: 'http://localhost:8002/test' },
+  ]
+  const statuses = await Promise.all(
+    services.map(async ({ name, url }) => {
+      try {
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        return { name, ok: response.ok }
+      } catch {
+        return { name, ok: false }
+      }
+    }),
+  )
 
-  // Order
-  const resOrder = await fetch('http://localhost:8001/test', {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-  const dataOrder = await resOrder.json()
-  console.log(dataOrder)
-
-  // Payment
-  const resPayment = await fetch('http://localhost:8002/test', {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-  const dataPayment = await resPayment.json()
-  console.log(dataPayment)
-
-  return <div className="">TestPage</div>
+  return (
+    <ul>
+      {statuses.map(({ name, ok }) => (
+        <li key={name}>
+          {name}: {ok ? 'Available' : 'Unavailable'}
+        </li>
+      ))}
+    </ul>
+  )
 }
 
 export default TestPage

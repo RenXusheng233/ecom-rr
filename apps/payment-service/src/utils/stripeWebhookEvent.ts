@@ -30,6 +30,7 @@ const objectId = (value: string | { id: string } | null | undefined) =>
 
 const toShippingSnapshot = (
   shipping: Stripe.Checkout.Session.CollectedInformation.ShippingDetails | null,
+  phone: string | null,
 ): ShippingSnapshot | null => {
   if (!shipping?.name || !shipping.address.line1 || !shipping.address.country) {
     return null
@@ -42,6 +43,7 @@ const toShippingSnapshot = (
     state: shipping.address.state,
     postalCode: shipping.address.postal_code,
     country: shipping.address.country,
+    phone,
   }
 }
 
@@ -103,6 +105,7 @@ export const normalizeStripeEvent = (
         email: session.customer_details?.email ?? null,
         shipping: toShippingSnapshot(
           session.collected_information?.shipping_details ?? null,
+          session.customer_details?.phone ?? null,
         ),
       }
     }

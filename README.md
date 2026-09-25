@@ -151,7 +151,8 @@ CATALOG_SYNC_ENFORCEMENT=false
 ```env
 CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
-DATABASE_URL="mongodb://admin:123456@localhost:27017/orders?authSource=admin&replicaSet=rs0"
+DATABASE_URL="mongodb://admin:YOUR_PASSWORD@localhost:27018/mongo-order-replset-db?authSource=admin&replicaSet=rs0&directConnection=true"
+TEST_ORDER_DATABASE_URL="mongodb://admin:YOUR_PASSWORD@localhost:27018/mongo-order-replset-db-test?authSource=admin&replicaSet=rs0&directConnection=true"
 ```
 
 ### `apps/payment-service/.env`

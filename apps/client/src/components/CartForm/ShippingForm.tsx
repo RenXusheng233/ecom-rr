@@ -13,6 +13,7 @@ import {
 
 type TInputForm = {
   keyName: keyof ShippingFormInputs
+  label?: string
   placeholder: string
   register: UseFormRegister<ShippingFormInputs>
   errors: FieldErrors<ShippingFormInputs>
@@ -21,6 +22,7 @@ type TInputForm = {
 
 const InputForm = ({
   keyName,
+  label,
   placeholder,
   register,
   errors,
@@ -29,7 +31,7 @@ const InputForm = ({
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={keyName} className="text-xs text-gray-500 font-medium">
-        {keyName.charAt(0).toUpperCase() + keyName.slice(1)}
+        {label ?? keyName.charAt(0).toUpperCase() + keyName.slice(1)}
       </label>
       <input
         type={type}
@@ -56,6 +58,7 @@ const ShippingForm = ({
     formState: { errors },
   } = useForm<ShippingFormInputs>({
     resolver: zodResolver(shippingFormSchema),
+    defaultValues: { country: 'US' },
   })
   const router = useRouter()
 
@@ -86,19 +89,33 @@ const ShippingForm = ({
       />
       <InputForm
         keyName="phone"
-        placeholder="12366668888"
+        placeholder="+1 512 555 0123"
         register={register}
         errors={errors}
       />
       <InputForm
         keyName="city"
-        placeholder="Shang Hai"
+        placeholder="Austin"
         register={register}
         errors={errors}
       />
       <InputForm
         keyName="address"
-        placeholder="Pu Tuo Xxx Jie Dao"
+        placeholder="1 Main St"
+        register={register}
+        errors={errors}
+      />
+      <InputForm
+        keyName="postalCode"
+        label="Postal code"
+        placeholder="78701"
+        register={register}
+        errors={errors}
+      />
+      <InputForm
+        keyName="country"
+        label="Country code"
+        placeholder="US or CN"
         register={register}
         errors={errors}
       />

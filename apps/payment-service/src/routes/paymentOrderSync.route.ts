@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { topics } from '@repo/kafka'
-import { paymentPrisma } from '@repo/payment-db'
+import { paymentPrisma, Prisma } from '@repo/payment-db'
 import { shouldBeAdmin } from '../middleware/authMiddleware'
 import {
   enqueueLifecycleReplay,
@@ -9,6 +9,19 @@ import {
 
 const route = new Hono()
 route.use('*', shouldBeAdmin)
+
+export const successfulPaymentsAwaitingOrderWhere = {
+  paymentStatus: 'SUCCEEDED',
+  OR: [
+    { orderAppliedVersion: null },
+    { orderExists: false },
+    {
+      orderAppliedVersion: {
+        lt: paymentPrisma.checkoutAttempt.fields.version,
+      },
+    },
+  ],
+} satisfies Prisma.CheckoutAttemptWhereInput
 
 route.get('/summary', async (context) => {
   const [webhookGroups, outboxGroups, oldestPending, awaitingOrder] =
@@ -28,10 +41,7 @@ route.get('/summary', async (context) => {
         select: { receivedAt: true },
       }),
       paymentPrisma.checkoutAttempt.count({
-        where: {
-          paymentStatus: 'SUCCEEDED',
-          OR: [{ orderAppliedVersion: null }, { orderExists: false }],
-        },
+        where: successfulPaymentsAwaitingOrderWhere,
       }),
     ])
 

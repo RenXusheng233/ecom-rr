@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { prisma, Prisma } from '@repo/product-db'
 import { randomUUID } from 'node:crypto'
+import { ProductFormSchema, ProductUpdateSchema } from '@repo/types'
 import { createCatalogSyncRequestedEvent } from '../utils/catalogSync'
 
 const createOutboxEvent = async (
@@ -40,28 +41,17 @@ const createOutboxEvent = async (
 }
 
 export const createProduct = async (req: Request, res: Response) => {
-  const data: Prisma.ProductCreateInput = req.body
-
-  const { colors, images } = data
-  if (!colors || !Array.isArray(colors) || colors.length === 0) {
-    return res.status(400).json({ error: 'Colors array is required!' })
-  }
-  if (!images || typeof images !== 'object') {
-    return res.status(400).json({ error: 'Images object is required' })
-  }
-  const missingColors = (colors as string[]).filter(
-    (color) => !(color in images),
-  )
-  if (missingColors.length > 0) {
+  const parsed = ProductFormSchema.safeParse(req.body)
+  if (!parsed.success) {
     return res
       .status(400)
-      .json({ error: 'Missing images for colors!', missingColors })
+      .json({ error: 'Invalid product', issues: parsed.error.issues })
   }
 
   const product = await prisma.$transaction(async (tx) => {
     const createdProduct = await tx.product.create({
       data: {
-        ...data,
+        ...parsed.data,
         catalogVersion: 1,
         stripeSyncStatus: 'PENDING',
         stripeSyncedVersion: null,
@@ -81,7 +71,15 @@ export const createProduct = async (req: Request, res: Response) => {
 export const updateProduct = async (req: Request, res: Response) => {
   const { id } = req.params
   const productId = Number(id)
-  const data: Prisma.ProductUpdateInput = req.body
+  if (!Number.isSafeInteger(productId) || productId < 1) {
+    return res.status(400).json({ error: 'Invalid product ID' })
+  }
+  const parsed = ProductUpdateSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ error: 'Invalid product', issues: parsed.error.issues })
+  }
 
   const updatedProduct = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`
@@ -90,17 +88,24 @@ export const updateProduct = async (req: Request, res: Response) => {
       WHERE "id" = ${productId}
       FOR UPDATE
     `
-    const current = await tx.product.findUniqueOrThrow({
-      where: { id: productId },
-      select: {
-        stripeSyncedVersion: true,
-        stripeSyncResultRevision: true,
-      },
+    const current = await tx.product.findUnique({ where: { id: productId } })
+    if (!current) return null
+    const validated = ProductFormSchema.safeParse({
+      name: current.name,
+      shortDescription: current.shortDescription,
+      description: current.description,
+      price: current.price,
+      categorySlug: current.categorySlug,
+      colors: current.colors,
+      sizes: current.sizes,
+      images: current.images,
+      ...parsed.data,
     })
+    if (!validated.success) return { validationError: validated.error.issues }
     const product = await tx.product.update({
       where: { id: productId },
       data: {
-        ...data,
+        ...parsed.data,
         catalogVersion: { increment: 1 },
         stripeSyncStatus: 'PENDING',
         stripeSyncedVersion: current.stripeSyncedVersion,
@@ -114,6 +119,14 @@ export const updateProduct = async (req: Request, res: Response) => {
     return product
   })
 
+  if (!updatedProduct)
+    return res.status(404).json({ error: 'Product not found' })
+  if ('validationError' in updatedProduct) {
+    return res.status(400).json({
+      error: 'Invalid product',
+      issues: updatedProduct.validationError,
+    })
+  }
   res.status(200).json(updatedProduct)
 }
 
@@ -148,6 +161,13 @@ export const deleteProduct = async (req: Request, res: Response) => {
 
 export const getProducts = async (req: Request, res: Response) => {
   const { sort, category, search, limit } = req.query
+  const parsedLimit = limit === undefined ? undefined : Number(limit)
+  if (
+    parsedLimit !== undefined &&
+    (!Number.isSafeInteger(parsedLimit) || parsedLimit < 1)
+  ) {
+    return res.status(400).json({ error: 'Invalid limit' })
+  }
 
   const orderBy = (() => {
     switch (sort) {
@@ -165,7 +185,12 @@ export const getProducts = async (req: Request, res: Response) => {
   const products = await prisma.product.findMany({
     where: {
       ...(process.env.CATALOG_SYNC_ENFORCEMENT === 'true'
-        ? { stripeSyncStatus: 'SYNCED' as const }
+        ? {
+            stripeSyncStatus: 'SYNCED' as const,
+            stripeSyncedVersion: {
+              equals: prisma.product.fields.catalogVersion,
+            },
+          }
         : {}),
       category: {
         slug: category as string,
@@ -176,26 +201,22 @@ export const getProducts = async (req: Request, res: Response) => {
       },
     },
     orderBy,
-    take: limit ? Number(limit) : undefined,
+    take: parsedLimit,
   })
 
-  res
-    .status(200)
-    .json(
-      process.env.CATALOG_SYNC_ENFORCEMENT === 'true'
-        ? products.filter(
-            (product) => product.stripeSyncedVersion === product.catalogVersion,
-          )
-        : products,
-    )
+  res.status(200).json(products)
 }
 
 export const getProduct = async (req: Request, res: Response) => {
   const { id } = req.params
+  const productId = Number(id)
+  if (!Number.isSafeInteger(productId) || productId < 1) {
+    return res.status(400).json({ error: 'Invalid product ID' })
+  }
 
   const product = await prisma.product.findUnique({
     where: {
-      id: Number(id),
+      id: productId,
       ...(process.env.CATALOG_SYNC_ENFORCEMENT === 'true'
         ? { stripeSyncStatus: 'SYNCED' as const }
         : {}),
@@ -204,13 +225,13 @@ export const getProduct = async (req: Request, res: Response) => {
 
   const isVersionSynced =
     product && product.stripeSyncedVersion === product.catalogVersion
-  res
-    .status(200)
-    .json(
-      process.env.CATALOG_SYNC_ENFORCEMENT === 'true' && !isVersionSynced
-        ? null
-        : product,
-    )
+  if (
+    !product ||
+    (process.env.CATALOG_SYNC_ENFORCEMENT === 'true' && !isVersionSynced)
+  ) {
+    return res.status(404).json({ error: 'Product not found' })
+  }
+  res.status(200).json(product)
 }
 
 export const getAdminProducts = async (req: Request, res: Response) => {

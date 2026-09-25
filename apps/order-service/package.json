@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "tsx --env-file=.env --watch src/index.ts",
     "check-types": "tsc --noEmit",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "test:integration": "tsx --env-file=.env --test src/utils/orderReliability.integration.test.ts"
   },
   "keywords": [],
   "author": "",

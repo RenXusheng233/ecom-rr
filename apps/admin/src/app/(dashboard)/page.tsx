@@ -3,7 +3,7 @@ import AppBarChart from '@/components/AppBarChart'
 import AppPieChart from '@/components/AppPieChart'
 import CardList, {
   LATEST_TRANSACTIONS,
-  POPULAR_PRODUCTS,
+  RECENT_PRODUCTS,
 } from '@/components/CardList'
 import TodoList from '@/components/TodoList'
 import { auth } from '@clerk/nextjs/server'
@@ -18,7 +18,10 @@ const HomePage = async () => {
         Authorization: `Bearer ${token}`,
       },
     },
-  ).then((res) => res.json())
+  ).then((res) => {
+    if (!res.ok) throw new Error('Failed to load order chart')
+    return res.json()
+  })
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -38,7 +41,7 @@ const HomePage = async () => {
         <AppAreaChart />
       </div>
       <div className="bg-primary-foreground p-4 rounded-lg">
-        <CardList title={POPULAR_PRODUCTS} />
+        <CardList title={RECENT_PRODUCTS} />
       </div>
     </div>
   )

@@ -162,7 +162,7 @@ const CartContent = () => {
                         </p>
                       </div>
                       <p className="font-medium">
-                        ${(price * quantity).toFixed(2)}
+                        ${(price * quantity).toFixed(2)} estimated
                       </p>
                     </div>
                   </div>
@@ -194,7 +194,7 @@ const CartContent = () => {
           <h2 className="font-semibold">Cart Details</h2>
           <div className="flex flex-col gap-4">
             <div className="flex justify-between text-sm">
-              <p className="text-gray-500">Subtotal</p>
+              <p className="text-gray-500">Estimated subtotal</p>
               <p className="font-medium">
                 $
                 {cartItems
@@ -202,24 +202,9 @@ const CartContent = () => {
                   .toFixed(2)}
               </p>
             </div>
-            <div className="flex justify-between text-sm">
-              <p className="text-gray-500">Discount(10%)</p>
-              <p className="font-medium text-red-500">-&nbsp;$10</p>
-            </div>
-            <div className="flex justify-between text-sm">
-              <p className="text-gray-500">Shipping fee</p>
-              <p className="font-medium">$10</p>
-            </div>
-            <hr className="border-gray-200" />
-            <div className="flex justify-between">
-              <p className="text-gray-800 font-semibold">Total</p>
-              <p className="font-medium">
-                $
-                {cartItems
-                  .reduce((curr, prev) => curr + prev.price * prev.quantity, 0)
-                  .toFixed(2)}
-              </p>
-            </div>
+            <p className="text-xs text-gray-500">
+              Stripe shows the final amount before you pay.
+            </p>
           </div>
           {activeStep === 1 && (
             <button
