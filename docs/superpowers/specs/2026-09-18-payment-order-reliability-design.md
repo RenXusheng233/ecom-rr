@@ -4,6 +4,8 @@
 **状态：** 已确认  
 **目标分支：** `feat/catalog-stripe-reliable-sync`
 
+> **Update · 2026-09-26 · 阅读边界：** 本文保留 2026-09-18 的已确认设计背景，不是最终验证记录；第 1 节描述的是改造前链路。核心 Inbox/Outbox、订单投影和 Ack 已有代码，本轮校对补充 Session 复用协议、实际管理 API 路径和未覆盖的恢复边界。当前导航见 [项目总览](../../项目总览与迭代规划.md)。历史实施计划保持原样。
+
 ## 1. 背景
 
 当前支付到订单链路为：Stripe Webhook 到达 Payment Service 后，Webhook handler 立即读取 Stripe Line Items，并且不等待 Kafka `send` 完成就返回成功；Order Service 收到 `payment.successful` 后直接创建 MongoDB Order。
@@ -331,7 +333,7 @@ Payment 忽略客户端提供的商品名称、价格、currency 或 Stripe Pric
 
 1. 在 PostgreSQL 中按 `(userId, clientRequestId)` 查找或创建 `CheckoutAttempt`。
 2. 已存在且 request hash 不同，返回 HTTP 409 和 `IDEMPOTENCY_KEY_REUSED`。
-3. 已存在且 hash 相同、Stripe Session 已确认，返回原 `clientSecret`。
+3. 已存在且 hash 相同、Stripe Session 已在本地确认，先向 Stripe 查询状态；`open` / `complete` 返回原 `clientSecret`，确认 `expired` 返回 `409 CHECKOUT_SESSION_EXPIRED`。无法确认状态时不自动创建替换 Session。
 4. 新记录写入服务端解析的价格、商品和选项快照，初始 `paymentStatus` 为 `CREATING`、version 为 0。
 5. 在数据库事务外调用 Stripe，idempotency key 为 `checkout-session:{attemptId}:v1`。
 6. Stripe Session metadata 和 PaymentIntent metadata 写入 `paymentAttemptId`、`orderId`、`userId`。
@@ -350,6 +352,14 @@ Payment 忽略客户端提供的商品名称、价格、currency 或 Stripe Pric
 ```
 
 `return_url` 使用 `CLIENT_APP_URL`，不再硬编码 localhost。
+
+### 8.4 Update · 2026-09-26：Session 复用与 Client 换键
+
+- 后端复用已确认 Session 前查询 Stripe 状态；只有确认 `expired` 才返回 HTTP 409 和稳定错误码 `CHECKOUT_SESSION_EXPIRED`。`open` / `complete` 仍复用原记录，不自动开启另一笔支付。
+- Client 收到这一特定错误后生成新 `Idempotency-Key`，对应新的 CheckoutAttempt；每次 helper 调用最多额外自动请求一次，不无限换键。
+- 同一购物车的并发过期响应复用第一个请求生成的替换 key；如果等待期间购物车 fingerprint 已变化或 key 被清除，Client 抛出本地错误 `CHECKOUT_REQUEST_CHANGED`，不覆盖新的支付尝试。该错误不是后端 API 错误码。
+- 网络失败、状态查询失败和创建结果未知时保留原 key；不能把超时当成原 Session 不存在的证据。已知过期 Session 的替换，不解决第 16.1 节的长故障恢复边界。
+- 浏览器 helper 将注入的 `fetch` 解构为独立函数再调用，避免 `dependencies.fetch(...)` 将依赖对象作为 receiver 导致 `Illegal invocation`。这里没有新增数据库字段或迁移。
 
 ## 9. Stripe Webhook 接收与处理
 
@@ -440,6 +450,8 @@ LOST
 - 不同事件导致的相同状态且完整投影快照也未变化时，不递增 version、不重复发布生命周期事件。
 - 状态不变但权威 email、shipping 或 Stripe identifiers 补齐/变化时，视为投影变化，递增 version 并重新发布完整快照。
 - 对账确认的状态变化和 Webhook 状态变化使用相同状态机函数。
+
+> **Update · 2026-09-26：退款覆盖边界。** 当前基于 `charge.refunded` 和权威退款金额投影 `NONE/PARTIAL/FULL`；这不是退款请求的完整生命周期。退款失败、取消及相应对账修正仍待实现，不能把已有金额投影理解为所有退款场景都已覆盖。
 
 ## 11. Payment Outbox 发布
 
@@ -614,24 +626,28 @@ GET /sessions/:sessionId
 
 对账不得直接跨库修改 Order，也不得绕过 Inbox/Outbox。
 
+> **Update · 2026-09-26：长故障恢复边界。** 同一 Stripe idempotency key 的恢复依赖第三方仍保留原响应；不能假定它永久有效。原 Session 已创建但本地未确认且超过该保留边界时，当前没有完整的“先可靠定位原 Session，再决定恢复或转人工处理”协议。上面的创建恢复与第 18 节相关保证受这一边界限制，不能承诺任意停机时长后都不会多建 Session。这与已知 Session 被确认 `expired` 后创建新 attempt 是不同问题。
+
 ### 16.2 管理接口
 
 由各服务现有管理员认证中间件保护。Payment Service 提供：
 
 ```text
-GET  /admin/payment-order-sync/summary
-GET  /admin/payment-order-sync/:orderId
-POST /admin/payment-order-sync/:orderId/retry
-POST /admin/payment-order-sync/reconcile
+GET  /payment-order-sync/summary
+GET  /payment-order-sync/:orderId
+POST /payment-order-sync/:orderId/retry
+POST /payment-order-sync/reconcile
 ```
 
 Order Service 提供：
 
 ```text
-GET  /admin/order-projection-sync/summary
-GET  /admin/order-projection-sync/:orderId
-POST /admin/order-projection-sync/:orderId/retry
+GET  /order-projection-sync/summary
+GET  /order-projection-sync/:orderId
+POST /order-projection-sync/:orderId/retry
 ```
+
+> **Update · 2026-09-26：** 以上是当前服务实际挂载的路径，不带 `/admin` 前缀；管理员限制由 `shouldBeAdmin` 中间件实现，不取决于路径名称。Admin 页面 `/payment-sync` 与这些后端接口路径也不是同一个概念。
 
 Admin UI 分别读取两组接口并按 orderId 展示，不增加 Payment 到 Order 的同步 HTTP 依赖。接口展示 attempt 状态、version、Stripe IDs、Inbox/Outbox、orderAppliedVersion、最后错误和重试次数。响应不得返回完整 Webhook payload 或完整支付凭据。
 
@@ -771,12 +787,20 @@ Order 的 `DATABASE_URL` 示例必须包含 replica set 参数。实际 `.env` �
 
 ```text
 相关 node:test
-现有 34 个 Catalog Sync 测试
+Catalog Sync 回归（原设计基线为 34 个，当前数量以运行输出为准）
 pnpm check-types
 pnpm lint
 pnpm build
 Stripe Test Mode 人工冒烟
 ```
+
+**Update · 2026-09-26：验证范围。** 这是验证清单，不是全部已通过的记录。`pnpm test:catalog-sync` / `pnpm test:payment-order` 当前不执行 Client helper 测试，需从仓库根目录额外运行：
+
+```bash
+pnpm --filter payment-service exec tsx --test ../../apps/client/src/lib/checkoutSession.test.ts ../../apps/client/src/types.test.ts
+```
+
+记录实际运行的命令、commit、通过/跳过数量和人工冒烟范围。未设置独立 `TEST_PAYMENT_DATABASE_URL` / `TEST_ORDER_DATABASE_URL` 时，真实数据库集成测试会跳过，不能据此宣称数据库事务或并发故障窗口已验证；fake `fetch` 测试也不能替代浏览器支付确认冒烟。
 
 ## 21. 实施与启用顺序
 

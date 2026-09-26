@@ -1,5 +1,7 @@
 # 01｜Next.js 全栈前端与性能优化
 
+> **Update · 2026-09-26：** 补充当前 Admin 演示数据边界、`/cart` 的 Suspense、Checkout Session 恢复和浏览器 `fetch` 回归。下列说明对应本分支代码，不把 demo 图表当作真实访客分析。
+
 ## 学习目标
 
 - 能根据数据与交互边界选择 Server/Client Component。
@@ -29,6 +31,15 @@
 - TanStack Query 处理新增等客户端 mutation。
 - TanStack Table 处理客户端排序、选择和分页。
 - Recharts 展示订单统计，shadcn/ui 作为可编辑的组件源码层。
+
+**Update · 2026-09-26 · 数据来源：** Browser Usage（`AppPieChart.tsx`）、Visitor Trends（`AppAreaChart.tsx`）使用静态 demo 数据；Todo List（`TodoList.tsx`）展示静态示例项与本地日期选择，没有后端任务持久化。它们与基于真实商品、订单数据的模块分开，面试时不能描述为已有访客埋点或任务管理服务。
+
+### Update · 2026-09-26：Checkout 的浏览器边界
+
+- `StripePaymentForm.tsx` 将取 secret 的逻辑交给 `src/lib/checkoutSession.ts`。同一购物车通常复用 `sessionStorage` 中的请求 key；只有服务端确认 Session 过期并返回 `409 CHECKOUT_SESSION_EXPIRED` 时，才换 key 并最多自动多请求一次。网络失败保留原 key；已完成 Session 不自动开启第二次支付。
+- **实际回归案例**：把原生 `fetch` 放进 dependencies，再用 `dependencies.fetch(...)` 调用，会把调用接收者变成 dependencies，从而触发浏览器 `Illegal invocation`。当前实现先取出 `fetch: requestFetch`，再用独立的 `requestFetch(...)` 调用，避免错误绑定。
+- 测试中的箭头函数 fake 不依赖 `this`，因此原先不能发现这个浏览器差异。现在增加接收者敏感的 fake，覆盖首次请求和过期后的再次请求；测试通过仍不能代替真实浏览器中的 Checkout 冒烟。
+- `CheckoutForm.tsx` 在 `confirm()` 中提交 `phoneNumber`，对应的服务端 Session 请求已启用 `phone_number_collection.enabled=true`。前后端第三方 SDK 配置必须配套，不能只检查 TypeScript 类型。
 
 ## 2. Server Component 与 Client Component
 
@@ -143,6 +154,8 @@ Streaming 让服务端先返回可用页面壳，再逐步发送慢区域。它�
 4. 再考虑缓存；不要用缓存掩盖 N+1 或无索引查询。
 
 本项目 Admin 首页把订单统计 Promise 传给图表组件，体现了“提前启动请求、延迟消费结果”的方向；仍应为各数据区补独立错误和加载边界。
+
+**Update · 2026-09-26 · 当前实现：** `/cart` 的 `CartPage` 已用 `<Suspense fallback={null}>` 包住调用 `useSearchParams()` 的 `CartContent`。这处理了该调用的边界要求，但不是把整页改成 Server Component，也不是已经补齐所有区域的 skeleton 和错误边界。
 
 ## 6. SEO：商品站点要回答“能否发现、能否理解、是否唯一”
 
