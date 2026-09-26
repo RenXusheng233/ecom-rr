@@ -31,6 +31,8 @@ const createHarness = () => {
   let failNextStripeCall = false
   let failNextConfirmation = false
   let failedAttemptCalls = 0
+  let sessionStatus: 'open' | 'complete' | 'expired' | null = 'open'
+  let failNextRetrieval = false
 
   const dependencies: CheckoutDependencies = {
     resolveCatalog: async () => ({
@@ -80,6 +82,16 @@ const createHarness = () => {
     failAttempt: async () => {
       failedAttemptCalls += 1
     },
+    retrieveStripeSessionStatus: async (sessionId: string) => {
+      assert.equal(sessionId, 'cs_1')
+      if (failNextRetrieval) {
+        failNextRetrieval = false
+        throw Object.assign(new Error('network timeout'), {
+          type: 'StripeConnectionError',
+        })
+      }
+      return sessionStatus
+    },
     createStripeSession: async (_input, idempotencyKey) => {
       stripeCalls.push({ idempotencyKey })
       if (failNextStripeCall) {
@@ -105,8 +117,91 @@ const createHarness = () => {
       failNextConfirmation = true
     },
     failedAttemptCalls: () => failedAttemptCalls,
+    setSessionStatus: (status: typeof sessionStatus) => {
+      sessionStatus = status
+    },
+    failRetrievalOnce: () => {
+      failNextRetrieval = true
+    },
   }
 }
+
+const checkoutInput = {
+  userId: 'user-1',
+  clientRequestId: 'request-1',
+  request,
+  clientAppUrl: 'http://localhost:3000',
+}
+
+test('rejects a confirmed expired Session without creating another one under the same key', async () => {
+  const harness = createHarness()
+  await createOrResumeCheckout(checkoutInput, harness.dependencies)
+  harness.setSessionStatus('expired')
+  await assert.rejects(
+    createOrResumeCheckout(checkoutInput, harness.dependencies),
+    { code: 'CHECKOUT_SESSION_EXPIRED' },
+  )
+  assert.equal(harness.stripeCalls.length, 1)
+  assert.equal(harness.failedAttemptCalls(), 0)
+})
+
+test('reuses a completed Session without starting a second payment', async () => {
+  const harness = createHarness()
+  const original = await createOrResumeCheckout(
+    checkoutInput,
+    harness.dependencies,
+  )
+  harness.setSessionStatus('complete')
+  assert.deepEqual(
+    await createOrResumeCheckout(checkoutInput, harness.dependencies),
+    original,
+  )
+  assert.equal(harness.stripeCalls.length, 1)
+})
+
+test('keeps the original attempt when Session retrieval has an unknown outcome', async () => {
+  const harness = createHarness()
+  const original = await createOrResumeCheckout(
+    checkoutInput,
+    harness.dependencies,
+  )
+  harness.failRetrievalOnce()
+  await assert.rejects(
+    createOrResumeCheckout(checkoutInput, harness.dependencies),
+    CheckoutCreationRetryableError,
+  )
+  assert.deepEqual(
+    await createOrResumeCheckout(checkoutInput, harness.dependencies),
+    original,
+  )
+  assert.equal(harness.stripeCalls.length, 1)
+})
+
+test('checks expiration on an already-confirmed concurrent unique-key winner', async () => {
+  const harness = createHarness()
+  await createOrResumeCheckout(checkoutInput, harness.dependencies)
+  const winner = await harness.dependencies.findAttempt('user-1', 'request-1')
+  assert.ok(winner)
+  harness.dependencies.findAttempt = async () => null
+  harness.dependencies.createAttempt = async () => winner
+  harness.setSessionStatus('expired')
+  await assert.rejects(
+    createOrResumeCheckout(checkoutInput, harness.dependencies),
+    { code: 'CHECKOUT_SESSION_EXPIRED' },
+  )
+  assert.equal(harness.stripeCalls.length, 1)
+})
+
+test('does not treat an unknown Session status as confirmed expiration', async () => {
+  const harness = createHarness()
+  await createOrResumeCheckout(checkoutInput, harness.dependencies)
+  harness.setSessionStatus(null)
+  await assert.rejects(
+    createOrResumeCheckout(checkoutInput, harness.dependencies),
+    CheckoutCreationRetryableError,
+  )
+  assert.equal(harness.stripeCalls.length, 1)
+})
 
 test('enables phone collection for Checkout confirmation', () => {
   const sessionRequest = buildStripeCheckoutSessionRequest({

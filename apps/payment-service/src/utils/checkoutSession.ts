@@ -43,6 +43,9 @@ export type CheckoutDependencies = {
     stripeClientSecret: string
   }): Promise<void>
   failAttempt(input: { attemptId: string; error: string }): Promise<void>
+  retrieveStripeSessionStatus(
+    sessionId: string,
+  ): Promise<'open' | 'complete' | 'expired' | null>
   createStripeSession(
     input: {
       userId: string
@@ -65,6 +68,10 @@ export class CheckoutCreationRetryableError extends Error {
 
 export class CheckoutCreationFailedError extends Error {
   readonly code = 'CHECKOUT_CREATION_FAILED'
+}
+
+export class CheckoutSessionExpiredError extends Error {
+  readonly code = 'CHECKOUT_SESSION_EXPIRED'
 }
 
 export const checkoutSessionIdempotencyKey = (attemptId: string) =>
@@ -112,8 +119,39 @@ const isRetryableStripeError = (error: unknown) => {
   )
 }
 
-const resultFromAttempt = (attempt: CheckoutAttemptRecord) => {
+const resultFromAttempt = async (
+  attempt: CheckoutAttemptRecord,
+  dependencies: CheckoutDependencies,
+) => {
   if (!attempt.stripeClientSecret) return null
+  if (!attempt.stripeCheckoutSessionId) {
+    throw new CheckoutCreationRetryableError(
+      'Checkout Session is not confirmed locally',
+    )
+  }
+  let status: 'open' | 'complete' | 'expired' | null
+  try {
+    status = await dependencies.retrieveStripeSessionStatus(
+      attempt.stripeCheckoutSessionId,
+    )
+  } catch (error) {
+    if (isRetryableStripeError(error)) {
+      throw new CheckoutCreationRetryableError(
+        'Checkout Session status could not be confirmed',
+      )
+    }
+    throw error
+  }
+  if (status === 'expired') {
+    throw new CheckoutSessionExpiredError(
+      'Start a new checkout attempt for this expired Session',
+    )
+  }
+  if (status !== 'open' && status !== 'complete') {
+    throw new CheckoutCreationRetryableError(
+      'Checkout Session status could not be confirmed',
+    )
+  }
   return {
     checkoutSessionClientSecret: attempt.stripeClientSecret,
     paymentAttemptId: attempt.id,
@@ -143,7 +181,9 @@ export const createOrResumeCheckout = async (
     )
   }
 
-  const existingResult = attempt ? resultFromAttempt(attempt) : null
+  const existingResult = attempt
+    ? await resultFromAttempt(attempt, dependencies)
+    : null
   if (existingResult) return existingResult
 
   if (!attempt) {
@@ -161,7 +201,7 @@ export const createOrResumeCheckout = async (
         'The idempotency key was already used for another checkout request',
       )
     }
-    const concurrentResult = resultFromAttempt(attempt)
+    const concurrentResult = await resultFromAttempt(attempt, dependencies)
     if (concurrentResult) return concurrentResult
   }
 

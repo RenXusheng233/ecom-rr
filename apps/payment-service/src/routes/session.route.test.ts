@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createMiddleware } from 'hono/factory'
 import { createSessionRoute } from './session.route'
+import { CheckoutSessionExpiredError } from '../utils/checkoutSession'
 
 const auth = createMiddleware<{ Variables: { userId: string } }>(
   async (context, next) => {
@@ -88,4 +89,35 @@ test('does not disclose a Checkout Session owned by another user', async () => {
 
   assert.equal(response.status, 404)
   assert.equal((await response.json()).error.code, 'CHECKOUT_SESSION_NOT_FOUND')
+})
+
+test('returns a stable 409 code for a confirmed expired Checkout Session', async () => {
+  const route = createSessionRoute(
+    {
+      createCheckout: async () => {
+        throw new CheckoutSessionExpiredError('Session expired')
+      },
+      findSessionStatus: async () => null,
+    },
+    auth,
+  )
+  const response = await route.request('/create-checkout-session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': '11111111-1111-4111-8111-111111111111',
+    },
+    body: JSON.stringify({
+      cart: [
+        {
+          productId: '42',
+          quantity: 1,
+          selectedSize: '42',
+          selectedColor: 'black',
+        },
+      ],
+    }),
+  })
+  assert.equal(response.status, 409)
+  assert.equal((await response.json()).error.code, 'CHECKOUT_SESSION_EXPIRED')
 })

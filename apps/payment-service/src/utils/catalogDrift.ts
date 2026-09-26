@@ -3,12 +3,14 @@ type DesiredCatalogState = {
   name: string | null
   unitAmount: number | null
   catalogVersion: number
+  stripePriceId: string | null
 }
 
 export type StripeCatalogState = {
   exists: boolean
   active: boolean
   defaultPriceActive: boolean
+  defaultPriceId: string | null
   activePriceCount: number
   name: string | null
   unitAmount: number | null
@@ -27,6 +29,7 @@ export const hasCatalogDrift = (
     !actual.exists ||
     !actual.active ||
     !actual.defaultPriceActive ||
+    actual.defaultPriceId !== desired.stripePriceId ||
     actual.name !== desired.name ||
     actual.unitAmount !== desired.unitAmount ||
     actual.catalogVersion !== desired.catalogVersion

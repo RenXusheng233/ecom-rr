@@ -11,6 +11,7 @@ import {
 import {
   CheckoutCreationFailedError,
   CheckoutCreationRetryableError,
+  CheckoutSessionExpiredError,
   IdempotencyKeyReusedError,
   buildStripeCheckoutSessionRequest,
   createOrResumeCheckout,
@@ -88,6 +89,9 @@ export const createSessionRoute = (
         }),
       )
     } catch (error) {
+      if (error instanceof CheckoutSessionExpiredError) {
+        return context.json(errorResponse(error.code), 409)
+      }
       if (error instanceof IdempotencyKeyReusedError) {
         return context.json(errorResponse(error.code, error.message), 409)
       }
@@ -247,6 +251,8 @@ const realDependencies: SessionRouteDependencies = {
             },
           })
         },
+        retrieveStripeSessionStatus: async (sessionId) =>
+          (await stripe.checkout.sessions.retrieve(sessionId)).status,
         createStripeSession: async (sessionInput, idempotencyKey) => {
           const session = await stripe.checkout.sessions.create(
             buildStripeCheckoutSessionRequest(sessionInput),

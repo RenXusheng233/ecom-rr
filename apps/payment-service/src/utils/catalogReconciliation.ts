@@ -1,11 +1,14 @@
 import { paymentPrisma } from '@repo/payment-db'
 import { randomUUID } from 'node:crypto'
 import { hasCatalogDrift } from './catalogDrift'
+import { invalidateAfterStaleMutation } from './catalogWorker'
 import {
   archiveStripeCatalogItem,
   inspectStripeCatalogItem,
   listStripeCatalogProducts,
 } from './stripeCatalog'
+
+class CatalogNoLongerOrphanError extends Error {}
 
 export const runCatalogReconciliation = async () => {
   const items = await paymentPrisma.stripeCatalogItem.findMany()
@@ -20,6 +23,7 @@ export const runCatalogReconciliation = async () => {
           name: item.desiredName,
           unitAmount: item.desiredUnitAmount,
           catalogVersion: item.desiredVersion,
+          stripePriceId: item.stripePriceId,
         },
         actual,
       )
@@ -57,12 +61,34 @@ export const runCatalogReconciliation = async () => {
     }
     if (!product.active || knownProducts.has(product.productId)) continue
 
-    await archiveStripeCatalogItem(
-      product.productId,
-      product.catalogVersion + 1,
-      randomUUID(),
-    )
-    archivedOrphans += 1
+    const isKnown = async () =>
+      (await paymentPrisma.stripeCatalogItem.count({
+        where: { productId: product.productId },
+      })) > 0
+    if (await isKnown()) continue
+
+    const archiveToken = randomUUID()
+    let mutationStarted = false
+    try {
+      await archiveStripeCatalogItem(
+        product.productId,
+        product.catalogVersion + 1,
+        archiveToken,
+        async () => {
+          if (await isKnown()) throw new CatalogNoLongerOrphanError()
+          mutationStarted = true
+        },
+      )
+      if (!(await isKnown())) archivedOrphans += 1
+    } catch (error) {
+      if (!(error instanceof CatalogNoLongerOrphanError)) throw error
+    } finally {
+      // A ledger insert can race with a Stripe write or its response. Fence
+      // concurrent claims and publish an invalidation before repairing it.
+      if (mutationStarted && (await isKnown())) {
+        await invalidateAfterStaleMutation(product.productId, archiveToken)
+      }
+    }
   }
 
   return {

@@ -9,11 +9,13 @@ Payment Service owns the dedicated Payment PostgreSQL database and two reliable 
 
 - Checkout validates cart options against the synchronized catalog ledger and ignores client price/name fields.
 - `(userId, Idempotency-Key)` identifies one `CheckoutAttempt`; Stripe receives `checkout-session:{attemptId}:v1`.
+- Saved Checkout Sessions are checked with Stripe before reuse. Confirmed expiration returns HTTP 409 / `CHECKOUT_SESSION_EXPIRED`; the client renews its request key and retries once. Ambiguous failures retain the original key, and completed Sessions never trigger automatic renewal.
 - The Webhook HTTP route verifies the Stripe signature, persists `event.id`, and returns only after Inbox durability.
 - A leased worker applies payment/refund/dispute transitions and writes Payment Outbox in the same Prisma transaction.
 - Generic Outbox publishing uses the stored topic/key/envelope metadata.
 - `order.payment.applied` acknowledgements are deduplicated and fenced by aggregate version.
 - Reconciliation repairs missed Stripe state, missing lifecycle publication and missing Order acknowledgements.
+- Catalog reconciliation compares the confirmed Price ID as well as amount/name/version. Orphan archiving rechecks the live ledger before each Stripe mutation and fences/requeues synchronization if a ledger entry appears during an archive.
 
 ## Required environment
 
@@ -33,6 +35,7 @@ PAYMENT_DATABASE_URL=... pnpm --filter @repo/payment-db db:deploy
 PAYMENT_DATABASE_URL=... pnpm --filter @repo/payment-db db:generate
 pnpm --filter payment-service test
 pnpm --filter payment-service check-types
+pnpm --filter payment-service exec tsx --test ../../apps/client/src/lib/checkoutSession.test.ts ../../apps/client/src/types.test.ts
 pnpm --filter payment-service dev
 ```
 

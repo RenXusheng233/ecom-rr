@@ -66,7 +66,7 @@ const assertCatalogClaimActive = async (claim: {
   }
 }
 
-const invalidateAfterStaleMutation = async (
+export const invalidateAfterStaleMutation = async (
   productId: string,
   staleClaimToken: string,
 ) => {
