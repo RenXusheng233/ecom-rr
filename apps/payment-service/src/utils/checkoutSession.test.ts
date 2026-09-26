@@ -4,6 +4,7 @@ import type { CheckoutRequest } from '@repo/types'
 import {
   CheckoutCreationRetryableError,
   IdempotencyKeyReusedError,
+  buildStripeCheckoutSessionRequest,
   createOrResumeCheckout,
   type CheckoutAttemptRecord,
   type CheckoutDependencies,
@@ -106,6 +107,18 @@ const createHarness = () => {
     failedAttemptCalls: () => failedAttemptCalls,
   }
 }
+
+test('enables phone collection for Checkout confirmation', () => {
+  const sessionRequest = buildStripeCheckoutSessionRequest({
+    userId: 'user-1',
+    paymentAttemptId: 'attempt-1',
+    orderId: 'order-1',
+    lineItems: [{ price: 'price_1', quantity: 1 }],
+    returnUrl: 'http://localhost:3000/return?session_id={CHECKOUT_SESSION_ID}',
+  })
+
+  assert.deepEqual(sessionRequest.phone_number_collection, { enabled: true })
+})
 
 test('normalizes equivalent cart lines before hashing', () => {
   const normalized = normalizeCheckoutRequest({

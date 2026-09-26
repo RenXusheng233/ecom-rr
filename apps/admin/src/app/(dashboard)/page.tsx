@@ -31,13 +31,13 @@ const HomePage = async () => {
       <div className="bg-primary-foreground p-4 rounded-lg">
         <CardList title={LATEST_TRANSACTIONS} />
       </div>
-      <div className="bg-primary-foreground p-4 rounded-lg">
+      <div className="bg-primary-foreground flex min-w-0 p-4 rounded-lg">
         <AppPieChart />
       </div>
-      <div className="bg-primary-foreground p-4 rounded-lg">
+      <div className="bg-primary-foreground h-[520px] min-w-0 p-4 rounded-lg">
         <TodoList />
       </div>
-      <div className="bg-primary-foreground p-4 rounded-lg lg:col-span-2 xl:col-span-1 2xl:col-span-2">
+      <div className="bg-primary-foreground h-[520px] min-w-0 p-4 rounded-lg lg:col-span-2 xl:col-span-1 2xl:col-span-2">
         <AppAreaChart />
       </div>
       <div className="bg-primary-foreground p-4 rounded-lg">

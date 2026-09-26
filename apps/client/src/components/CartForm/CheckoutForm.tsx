@@ -32,7 +32,8 @@ const CheckoutForm = ({ shippingForm }: CheckoutFormProps) => {
         shippingAddress: toStripeShippingAddress(shippingForm),
       })
       if (result.type === 'error') setError(result.error.message)
-    } catch {
+    } catch (err) {
+      console.log(err)
       setError('Unable to confirm payment. Please try again.')
     } finally {
       setLoading(false)

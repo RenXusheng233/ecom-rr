@@ -85,6 +85,7 @@ export const buildStripeCheckoutSessionRequest = (input: {
   mode: 'payment' as const,
   ui_mode: 'custom' as const,
   return_url: input.returnUrl,
+  phone_number_collection: { enabled: true },
   metadata: {
     paymentAttemptId: input.paymentAttemptId,
     orderId: input.orderId,
