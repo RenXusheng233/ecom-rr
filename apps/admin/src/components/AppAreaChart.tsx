@@ -31,9 +31,14 @@ const chartConfig = {
 
 const AppAreaChart = () => {
   return (
-    <div>
-      <h1 className="text-lg font-medium mb-6">Total Visitors</h1>
-      <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
+    <div className="flex h-full min-h-0 flex-col">
+      <h1 className="text-lg font-medium mb-2 shrink-0">
+        Visitor Trends(Demo data)
+      </h1>
+      <ChartContainer
+        config={chartConfig}
+        className="aspect-auto min-h-0 w-full flex-1"
+      >
         <AreaChart accessibilityLayer data={chartData}>
           <CartesianGrid vertical={false} />
           <XAxis

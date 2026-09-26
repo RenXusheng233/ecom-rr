@@ -11,7 +11,7 @@ const Footer = () => {
             TRENDRR.
           </p>
         </Link>
-        <p className="text-sm text-gray-400 ">© 2025 TrendRR.</p>
+        <p className="text-sm text-gray-400 ">© 2026 TrendRR.</p>
         <p className="text-sm text-gray-400 ">All rights reserved.</p>
       </div>
       <div className="flex flex-col gap-4 items-center md:items-start text-gray-400 text-sm">

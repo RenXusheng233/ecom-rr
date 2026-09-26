@@ -1,28 +1,140 @@
 import { topics } from '@repo/kafka'
 import { consumer } from './kafka'
-import { createStripeProduct, deleteStripeProduct } from './stripeProduct'
-import { StripeProductType } from '@repo/types'
+import { paymentPrisma } from '@repo/payment-db'
+import {
+  orderPaymentAppliedEventSchema,
+  type CatalogSyncRequestedEvent,
+} from '@repo/types'
+import { shouldApplyCatalogEvent } from './catalogEvent'
+import { incomingCatalogTaskState } from './catalogProcessing'
+import { persistOrderProjectionAck } from './orderProjectionAck'
+
+const validateEvent = (message: unknown): CatalogSyncRequestedEvent => {
+  const event = message as CatalogSyncRequestedEvent
+  if (
+    typeof event?.eventId !== 'string' ||
+    !event.eventId ||
+    typeof event.productId !== 'string' ||
+    !event.productId ||
+    typeof event.occurredAt !== 'string' ||
+    Number.isNaN(Date.parse(event.occurredAt)) ||
+    !Number.isSafeInteger(event.catalogVersion) ||
+    event.catalogVersion < 1 ||
+    !['UPSERT', 'ARCHIVE'].includes(event.operation)
+  ) {
+    throw new Error('Invalid catalog sync event')
+  }
+  if (
+    event.operation === 'UPSERT' &&
+    (!event.product ||
+      !event.product.name?.trim() ||
+      event.product.currency !== 'usd' ||
+      !Number.isSafeInteger(event.product.unitAmount) ||
+      event.product.unitAmount < 1 ||
+      !Array.isArray(event.product.sizes) ||
+      event.product.sizes.length === 0 ||
+      !Array.isArray(event.product.colors) ||
+      event.product.colors.length === 0)
+  ) {
+    throw new Error('UPSERT catalog sync event has invalid product data')
+  }
+  if (event.operation === 'ARCHIVE' && event.product !== null) {
+    throw new Error('ARCHIVE catalog sync event must contain a tombstone')
+  }
+  return event
+}
 
 export const runKafkaSubscriptions = async () => {
-  consumer.subscribe([
+  await consumer.subscribe([
     {
-      topicName: topics.product_created,
+      topicName: topics.catalog_product_sync_requested,
+      errorPolicy: 'retry',
       topicHandler: async (message) => {
-        const product = message.value as StripeProductType
+        let event: CatalogSyncRequestedEvent
+        try {
+          event = validateEvent(message)
+        } catch (error) {
+          console.error('Rejected invalid catalog sync event', error)
+          return
+        }
 
-        console.log(`Receive message: ${topics.product_created}`, product)
+        await paymentPrisma.$transaction(async (tx) => {
+          const existingEvent = await tx.catalogInboxEvent.findUnique({
+            where: { id: event.eventId },
+          })
+          if (existingEvent) return
 
-        await createStripeProduct(product)
+          await tx.catalogInboxEvent.create({
+            data: { id: event.eventId, productId: event.productId },
+          })
+
+          const current = await tx.stripeCatalogItem.findUnique({
+            where: { productId: event.productId },
+          })
+          if (
+            !shouldApplyCatalogEvent(
+              current?.desiredVersion ?? null,
+              event.catalogVersion,
+            )
+          ) {
+            return
+          }
+
+          await tx.stripeCatalogItem.upsert({
+            where: { productId: event.productId },
+            create: {
+              productId: event.productId,
+              desiredEventId: event.eventId,
+              desiredVersion: event.catalogVersion,
+              desiredOperation: event.operation,
+              desiredName: event.product?.name,
+              desiredUnitAmount: event.product?.unitAmount,
+              desiredCurrency: event.product?.currency,
+              desiredSizes: event.product?.sizes ?? [],
+              desiredColors: event.product?.colors ?? [],
+              desiredRunId: event.eventId,
+              status: 'PENDING',
+            },
+            update: {
+              desiredEventId: event.eventId,
+              desiredVersion: event.catalogVersion,
+              desiredOperation: event.operation,
+              desiredName: event.product?.name,
+              desiredUnitAmount: event.product?.unitAmount,
+              desiredCurrency: event.product?.currency,
+              desiredSizes: event.product?.sizes ?? [],
+              desiredColors: event.product?.colors ?? [],
+              desiredRunId: event.eventId,
+              ...incomingCatalogTaskState(current?.status ?? 'PENDING'),
+              ...(current?.status === 'PROCESSING'
+                ? {}
+                : { nextAttemptAt: new Date() }),
+            },
+          })
+        })
       },
     },
     {
-      topicName: topics.product_deleted,
-      topicHandler: async (message) => {
-        const productId = message.value as number
-
-        console.log(`Receive message: ${topics.product_deleted}`, productId)
-
-        await deleteStripeProduct(productId)
+      topicName: topics.order_payment_applied,
+      errorPolicy: 'retry',
+      invalidMessageHandler: async (_rawMessage, metadata) => {
+        console.error('Rejected malformed Order projection acknowledgement', {
+          topic: metadata.topic,
+          partition: metadata.partition,
+          offset: metadata.offset,
+        })
+      },
+      topicHandler: async (message, metadata) => {
+        const parsed = orderPaymentAppliedEventSchema.safeParse(message)
+        if (!parsed.success) {
+          console.error('Rejected invalid Order projection acknowledgement', {
+            topic: metadata.topic,
+            partition: metadata.partition,
+            offset: metadata.offset,
+          })
+          return
+        }
+        await persistOrderProjectionAck(parsed.data)
       },
     },
   ])

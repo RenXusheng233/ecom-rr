@@ -2,10 +2,13 @@ import { auth } from '@clerk/nextjs/server'
 import { OrderType } from '@repo/types'
 import { ArrowRight, CalendarDays, Package2, ShoppingBag } from 'lucide-react'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 
 const fetchOrders = async () => {
-  const { getToken } = await auth()
+  const { userId, getToken } = await auth()
+  if (!userId) redirect('/sign-in?redirect_url=%2Forders')
   const token = await getToken()
+  if (!token) redirect('/sign-in?redirect_url=%2Forders')
 
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_ORDER_SERVICE_URL}/user-orders`,
@@ -16,7 +19,12 @@ const fetchOrders = async () => {
     },
   )
 
+  if (res.status === 401 || res.status === 403) {
+    redirect('/sign-in?redirect_url=%2Forders')
+  }
+  if (!res.ok) throw new Error('Failed to load orders')
   const orders: OrderType[] = await res.json()
+  if (!Array.isArray(orders)) throw new Error('Invalid orders response')
   return orders
 }
 
@@ -26,7 +34,7 @@ const formatStatus = (status: string) =>
   status.charAt(0).toUpperCase() + status.slice(1)
 
 const getStatusClassName = (status: string) =>
-  status === 'success'
+  status === 'SUCCEEDED'
     ? 'bg-green-100 text-green-700'
     : 'bg-red-100 text-red-600'
 
@@ -79,78 +87,99 @@ const OrdersPage = async () => {
       </div>
 
       <ul className="flex flex-col gap-6">
-        {orders.map(({ _id, amount, status, createdAt, products }) => (
-          <li
-            key={_id}
-            className="overflow-hidden rounded-lg border border-gray-100 bg-white shadow-lg"
-          >
-            <div className="flex flex-col gap-4 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
-                  <Package2 className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                    Order ID
-                  </p>
-                  <p className="mt-1 truncate text-sm font-medium text-gray-800">
-                    #{_id}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 sm:justify-end">
-                <div className="flex items-center gap-2 text-sm text-gray-500">
-                  <CalendarDays className="h-4 w-4" />
-                  <span>
-                    {createdAt
-                      ? new Date(createdAt).toLocaleDateString('en-US')
-                      : '-'}
-                  </span>
-                </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClassName(status)}`}
-                >
-                  {formatStatus(status)}
-                </span>
-              </div>
-            </div>
-
-            <div className="p-5">
-              <div className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-400">
-                <ShoppingBag className="h-4 w-4" />
-                Products
-              </div>
-              <div className="divide-y divide-gray-100">
-                {products?.map((product, index) => (
-                  <div
-                    key={`${product.name}-${index}`}
-                    className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-800">
-                        {product.name}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Quantity: {product.quantity}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-sm font-medium text-gray-800">
-                      {formatCurrency(product.price * product.quantity)}
+        {orders.map(
+          ({
+            _id,
+            orderId,
+            amountTotal,
+            paymentStatus,
+            refundStatus,
+            disputeStatus,
+            createdAt,
+            products,
+          }) => (
+            <li
+              key={_id}
+              className="overflow-hidden rounded-lg border border-gray-100 bg-white shadow-lg"
+            >
+              <div className="flex flex-col gap-4 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
+                    <Package2 className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                      Order ID
+                    </p>
+                    <p className="mt-1 truncate text-sm font-medium text-gray-800">
+                      #{orderId}
                     </p>
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            <div className="flex items-center justify-between bg-gray-50 px-5 py-4">
-              <span className="text-sm font-medium text-gray-500">Total</span>
-              <span className="text-lg font-semibold text-gray-800">
-                {formatCurrency(amount)}
-              </span>
-            </div>
-          </li>
-        ))}
+                <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <CalendarDays className="h-4 w-4" />
+                    <span>
+                      {createdAt
+                        ? new Date(createdAt).toLocaleDateString('en-US')
+                        : '-'}
+                    </span>
+                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusClassName(paymentStatus)}`}
+                  >
+                    {formatStatus(paymentStatus)}
+                  </span>
+                  {refundStatus !== 'NONE' && (
+                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-700">
+                      Refund: {formatStatus(refundStatus)}
+                    </span>
+                  )}
+                  {disputeStatus !== 'NONE' && (
+                    <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-700">
+                      Dispute: {formatStatus(disputeStatus)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-5">
+                <div className="mb-4 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+                  <ShoppingBag className="h-4 w-4" />
+                  Products
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {products?.map((product, index) => (
+                    <div
+                      key={`${product.name}-${index}`}
+                      className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-800">
+                          {product.name}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Quantity: {product.quantity}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-sm font-medium text-gray-800">
+                        {formatCurrency(product.unitAmount * product.quantity)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between bg-gray-50 px-5 py-4">
+                <span className="text-sm font-medium text-gray-500">Total</span>
+                <span className="text-lg font-semibold text-gray-800">
+                  {formatCurrency(amountTotal)}
+                </span>
+              </div>
+            </li>
+          ),
+        )}
       </ul>
     </div>
   )

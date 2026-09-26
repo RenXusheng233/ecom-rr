@@ -1,5 +1,21 @@
-import { Injectable } from '@nestjs/common'
+import {
+  BadGatewayException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import { clerkClient } from '../utils/clerk'
+
+const rethrowClerkError = (error: unknown, action: string): never => {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    error.status === 404
+  ) {
+    throw new NotFoundException('User not found')
+  }
+  throw new BadGatewayException(`Failed to ${action} user`)
+}
 
 @Injectable()
 export class UserService {
@@ -13,8 +29,7 @@ export class UserService {
       const user = await clerkClient.users.getUser(id)
       return user
     } catch (error) {
-      console.error('Error fetching user:', error)
-      return null
+      rethrowClerkError(error, 'fetch')
     }
   }
 
@@ -30,8 +45,7 @@ export class UserService {
       const user = await clerkClient.users.deleteUser(id)
       return user
     } catch (error) {
-      console.error('Error deleting user:', error)
-      return null
+      rethrowClerkError(error, 'delete')
     }
   }
 }

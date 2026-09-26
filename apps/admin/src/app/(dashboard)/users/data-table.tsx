@@ -59,11 +59,12 @@ export function DataTable<TData, TValue>({
   const mutation = useMutation({
     mutationFn: async () => {
       const token = await getToken()
+      if (!token) throw new Error('Please sign in again')
       const selectedRows = table.getSelectedRowModel().rows
-      await Promise.all(
+      const results = await Promise.allSettled(
         selectedRows.map(async (row) => {
           const userId = (row.original as User).id
-          await fetch(
+          const res = await fetch(
             `${process.env.NEXT_PUBLIC_AUTH_SERVICE_URL}/users/${userId}`,
             {
               method: 'DELETE',
@@ -72,16 +73,27 @@ export function DataTable<TData, TValue>({
               },
             },
           )
+          if (!res.ok) {
+            throw new Error(`Failed to delete user ${userId} (${res.status})`)
+          }
         }),
       )
+      const failed = results.filter(
+        (result) => result.status === 'rejected',
+      ).length
+      if (failed > 0) {
+        throw new Error(`${failed} of ${results.length} user deletions failed`)
+      }
     },
     onSuccess: () => {
       toast.success('User(s) deleted successfully')
+      setRowSelection({})
       router.refresh()
-      // FIXME: 删除成功后, rowSelection 没有清空, 需要手动清空
     },
     onError: (error) => {
       toast.error(`Error: ${error.message}`)
+      setRowSelection({})
+      router.refresh()
     },
   })
 

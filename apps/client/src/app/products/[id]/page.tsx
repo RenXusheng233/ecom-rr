@@ -1,6 +1,8 @@
 import ProductInteraction from '@/components/Product/ProductInteraction'
+import { Suspense } from 'react'
 import { ProductType } from '@repo/types'
 import Image from 'next/image'
+import { notFound } from 'next/navigation'
 
 // NOTE: TEMPORARY
 // const product: ProductType = {
@@ -27,7 +29,10 @@ const fetchProduct = async (id: string) => {
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products/${id}`,
   )
+  if (res.status === 400 || res.status === 404) notFound()
+  if (!res.ok) throw new Error('Failed to load product')
   const product: ProductType = await res.json()
+  if (!product) notFound()
   return product
 }
 
@@ -81,11 +86,13 @@ const ProductPage = async ({
         <p className="text-gray-500">{product.description}</p>
         <h2 className="text-2xl font-semibold">${product.price}</h2>
         {/* INTERACTION */}
-        <ProductInteraction
-          product={product}
-          selectedSize={selectedSize}
-          selectedColor={selectedColor}
-        />
+        <Suspense fallback={null}>
+          <ProductInteraction
+            product={product}
+            selectedSize={selectedSize}
+            selectedColor={selectedColor}
+          />
+        </Suspense>
         {/* CARD INFO */}
         <div className="flex items-center gap-2 mt-4">
           <Image

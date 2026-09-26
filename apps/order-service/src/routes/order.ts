@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { shouldBeAdmin, shouldBeUser } from '../middleware/authMiddleware'
-import { Order, OrderStatus } from '@repo/order-db'
+import { Order } from '@repo/order-db'
 import { startOfMonth, subMonths } from 'date-fns'
 import { OrderChartType } from '@repo/types'
 
@@ -9,10 +9,25 @@ export const orderRoute = async (fastify: FastifyInstance) => {
     '/orders',
     { preHandler: shouldBeAdmin },
     async (request, reply) => {
-      const { limit } = request.query as { limit: number }
+      const requestedLimit = Number(
+        (request.query as { limit?: string | number }).limit ?? 100,
+      )
+      const limit = Number.isSafeInteger(requestedLimit)
+        ? Math.min(Math.max(requestedLimit, 1), 500)
+        : 100
 
-      const orders = await Order.find().limit(limit).sort({ createdAt: -1 })
-      return reply.send(orders)
+      const orders = await Order.find()
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .lean()
+      return reply.send(
+        orders.map((order) => ({
+          ...order,
+          _id: order._id.toString(),
+          createdAt: order.createdAt.toISOString(),
+          updatedAt: order.updatedAt.toISOString(),
+        })),
+      )
     },
   )
 
@@ -21,7 +36,16 @@ export const orderRoute = async (fastify: FastifyInstance) => {
     { preHandler: shouldBeUser },
     async (request, reply) => {
       const orders = await Order.find({ userId: request.userId })
-      return reply.send(orders)
+        .sort({ createdAt: -1 })
+        .lean()
+      return reply.send(
+        orders.map((order) => ({
+          ...order,
+          _id: order._id.toString(),
+          createdAt: order.createdAt.toISOString(),
+          updatedAt: order.updatedAt.toISOString(),
+        })),
+      )
     },
   )
 
@@ -47,7 +71,7 @@ export const orderRoute = async (fastify: FastifyInstance) => {
             total: { $sum: 1 },
             successful: {
               $sum: {
-                $cond: [{ $eq: ['$status', OrderStatus[0]] }, 1, 0],
+                $cond: [{ $eq: ['$paymentStatus', 'SUCCEEDED'] }, 1, 0],
               },
             },
           },

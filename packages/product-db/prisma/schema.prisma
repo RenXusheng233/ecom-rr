@@ -14,18 +14,60 @@ datasource db {
 }
 
 model Product {
-  id               Int      @id @default(autoincrement())
-  name             String
-  shortDescription String
-  description      String
-  price            Int
-  sizes            String[]
-  colors           String[]
-  images           Json
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  categorySlug     String
-  category         Category @relation(fields: [categorySlug], references: [slug])
+  id                       Int               @id @default(autoincrement())
+  name                     String
+  shortDescription         String
+  description              String
+  price                    Int
+  sizes                    String[]
+  colors                   String[]
+  images                   Json
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  catalogVersion           Int               @default(1)
+  stripeSyncStatus         CatalogSyncStatus @default(PENDING)
+  stripeSyncedVersion      Int?
+  stripeSyncedAt           DateTime?
+  stripeSyncError          String?
+  stripeSyncResultRevision Int               @default(0)
+  categorySlug             String
+  category                 Category          @relation(fields: [categorySlug], references: [slug])
+}
+
+model ProductOutboxEvent {
+  id               String               @id @default(uuid())
+  aggregateId      String
+  aggregateVersion Int
+  operation        CatalogSyncOperation
+  payload          Json
+  status           OutboxStatus         @default(PENDING)
+  attempts         Int                  @default(0)
+  nextAttemptAt    DateTime             @default(now())
+  leaseUntil       DateTime?
+  claimToken       String?
+  publishedAt      DateTime?
+  lastError        String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@unique([aggregateId, aggregateVersion, operation])
+  @@index([status, nextAttemptAt])
+}
+
+enum CatalogSyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum CatalogSyncOperation {
+  UPSERT
+  ARCHIVE
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
 }
 
 model Category {

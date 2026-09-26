@@ -1,11 +1,19 @@
 import { ProductType } from '@repo/types'
 import { columns } from './columns'
 import { DataTable } from './data-table'
+import { auth } from '@clerk/nextjs/server'
 
 const getData = async (): Promise<ProductType[]> => {
   try {
+    const { getToken } = await auth()
+    const token = await getToken()
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products`,
+      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products/admin`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
     )
     const data = await res.json()
     return data

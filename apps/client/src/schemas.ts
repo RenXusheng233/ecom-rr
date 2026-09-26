@@ -1,14 +1,20 @@
 import { z } from 'zod'
 
 export const shippingFormSchema = z.object({
-  name: z.string().min(1, 'Name is required!'),
+  name: z.string().trim().min(1, 'Name is required!'),
   email: z.email().min(1, 'Email is required!'),
   phone: z
     .string()
-    .length(11, 'Phone number must be 11 digits!')
-    .regex(/^\d+$/, 'Phone number must contain only numbers!'),
-  city: z.string().min(1, 'City is required'),
-  address: z.string().min(1, 'Address is required!'),
+    .trim()
+    .regex(/^\+?[\d\s()-]{7,20}$/, 'Enter a valid phone number'),
+  city: z.string().trim().min(1, 'City is required'),
+  address: z.string().trim().min(1, 'Address is required!'),
+  postalCode: z.string().trim().min(1, 'Postal code is required!'),
+  country: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z]{2}$/, 'Enter a two-letter country code')
+    .transform((country) => country.toUpperCase()),
 })
 
 export const paymentFormSchema = z.object({

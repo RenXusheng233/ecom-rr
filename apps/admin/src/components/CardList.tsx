@@ -4,7 +4,7 @@ import { Badge } from './ui/badge'
 import { OrderType, ProductType } from '@repo/types'
 import { auth } from '@clerk/nextjs/server'
 
-export const POPULAR_PRODUCTS = 'Popular Products'
+export const RECENT_PRODUCTS = 'Recent Products'
 export const LATEST_TRANSACTIONS = 'Latest Transactions'
 
 const CardList = async ({ title }: { title: string }) => {
@@ -14,10 +14,13 @@ const CardList = async ({ title }: { title: string }) => {
   let products: ProductType[] = []
   let orders: OrderType[] = []
 
-  if (title === POPULAR_PRODUCTS) {
+  if (title === RECENT_PRODUCTS) {
     products = await fetch(
-      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5&popular=true`,
-    ).then((res) => res.json())
+      `${process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL}/products?limit=5`,
+    ).then((res) => {
+      if (!res.ok) throw new Error('Failed to load recent products')
+      return res.json()
+    })
   } else {
     orders = await fetch(
       `${process.env.NEXT_PUBLIC_ORDER_SERVICE_URL}/orders?limit=5`,
@@ -26,14 +29,17 @@ const CardList = async ({ title }: { title: string }) => {
           Authorization: `Bearer ${token}`,
         },
       },
-    ).then((res) => res.json())
+    ).then((res) => {
+      if (!res.ok) throw new Error('Failed to load recent transactions')
+      return res.json()
+    })
   }
 
   return (
     <div>
       <div className="text-lg font-medium mb-6">{title}</div>
       <div className="flex flex-col gap-2">
-        {title === POPULAR_PRODUCTS
+        {title === RECENT_PRODUCTS
           ? products.map(({ id, name, images, price }) => (
               <Card
                 key={id}
@@ -57,18 +63,27 @@ const CardList = async ({ title }: { title: string }) => {
                 <CardFooter className="p-0">${price}</CardFooter>
               </Card>
             ))
-          : orders.map(({ _id, email, status, amount }) => (
-              <Card
-                key={_id}
-                className="flex-row items-center justify-between gap-4 p-4"
-              >
-                <CardContent className="p-0 flex-1">
-                  <CardTitle className="text-sm font-medium">{email}</CardTitle>
-                  <Badge variant="secondary">{status}</Badge>
-                </CardContent>
-                <CardFooter className="p-0">${amount / 100}</CardFooter>
-              </Card>
-            ))}
+          : orders.map(
+              ({ _id, email, paymentStatus, amountTotal, currency }) => (
+                <Card
+                  key={_id}
+                  className="flex-row items-center justify-between gap-4 p-4"
+                >
+                  <CardContent className="p-0 flex-1">
+                    <CardTitle className="text-sm font-medium">
+                      {email}
+                    </CardTitle>
+                    <Badge variant="secondary">{paymentStatus}</Badge>
+                  </CardContent>
+                  <CardFooter className="p-0">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: currency.toUpperCase(),
+                    }).format(amountTotal / 100)}
+                  </CardFooter>
+                </Card>
+              ),
+            )}
       </div>
     </div>
   )

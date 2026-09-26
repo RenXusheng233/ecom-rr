@@ -85,6 +85,25 @@ export const columns: ColumnDef<ProductType>[] = [
     header: 'Description',
   },
   {
+    accessorKey: 'stripeSyncStatus',
+    header: 'Stripe',
+    cell: ({ row }) => {
+      const product = row.original
+      const color =
+        product.stripeSyncStatus === 'SYNCED'
+          ? 'text-green-600'
+          : product.stripeSyncStatus === 'FAILED'
+            ? 'text-red-600'
+            : 'text-amber-600'
+
+      return (
+        <span className={color} title={product.stripeSyncError ?? undefined}>
+          {product.stripeSyncStatus}
+        </span>
+      )
+    },
+  },
+  {
     id: 'actions',
     cell: ({ row }) => {
       const product = row.original

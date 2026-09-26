@@ -7,6 +7,14 @@ import sessionRoute from './routes/session.route.js'
 import webhookRoute from './routes/webhooks.route.js'
 import { consumer, producer } from './utils/kafka.js'
 import { runKafkaSubscriptions } from './utils/subscriptions.js'
+import { paymentPrisma } from '@repo/payment-db'
+import catalogRoute from './routes/catalog.route.js'
+import { startCatalogSyncWorker } from './utils/catalogWorker.js'
+import { startPaymentOutboxWorker } from './utils/paymentOutboxWorker.js'
+import { startCatalogReconciliation } from './utils/catalogReconciliation.js'
+import { startStripeWebhookWorker } from './utils/stripeWebhookWorker.js'
+import paymentOrderSyncRoute from './routes/paymentOrderSync.route.js'
+import { startPaymentOrderReconciliation } from './utils/paymentReconciliation.js'
 
 const app = new Hono()
 
@@ -14,9 +22,13 @@ app.use('*', clerkMiddleware())
 app.use(
   '*',
   cors({
-    origin: ['http://localhost:3000'],
+    origin: ['http://localhost:3000', 'http://localhost:3001'],
   }),
 )
+
+const workerIntervals: NodeJS.Timeout[] = []
+let server: ReturnType<typeof serve> | undefined
+let shuttingDown = false
 
 app.get('/health', (c) => {
   return c.json({
@@ -48,13 +60,23 @@ app.get('/test', shouldBeUser, async (c) => {
 
 app.route('/sessions', sessionRoute)
 app.route('/webhooks', webhookRoute)
+app.route('/catalog-sync', catalogRoute)
+app.route('/payment-order-sync', paymentOrderSyncRoute)
 
 const start = async () => {
   try {
+    await paymentPrisma.$connect()
     await producer.connect()
     await consumer.connect()
     await runKafkaSubscriptions()
-    serve(
+    workerIntervals.push(
+      startCatalogSyncWorker(),
+      startStripeWebhookWorker(),
+      startPaymentOutboxWorker(),
+      startCatalogReconciliation(),
+      startPaymentOrderReconciliation(),
+    )
+    server = serve(
       {
         fetch: app.fetch,
         port: 8002,
@@ -69,4 +91,20 @@ const start = async () => {
   }
 }
 
-start()
+const shutdown = async () => {
+  if (shuttingDown) return
+  shuttingDown = true
+  workerIntervals.forEach(clearInterval)
+  if (server) {
+    await new Promise<void>((resolve, reject) =>
+      server!.close((error) => (error ? reject(error) : resolve())),
+    )
+  }
+  await Promise.allSettled([consumer.disconnect(), producer.disconnect()])
+  await paymentPrisma.$disconnect()
+}
+
+process.once('SIGINT', () => void shutdown())
+process.once('SIGTERM', () => void shutdown())
+
+void start()

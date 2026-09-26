@@ -15,11 +15,13 @@ const TodoList = () => {
   const [open, setOpen] = useState<boolean>(false)
 
   return (
-    <div className="">
-      <h1 className="text-lg font-medium mb-6">Todo List</h1>
+    <div className="flex h-full min-h-0 flex-col">
+      <h1 className="text-lg font-medium mb-2 shrink-0">
+        Todo List(Demo data)
+      </h1>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button className="w-full">
+          <Button className="w-full shrink-0">
             <CalendarIcon />
             {date ? format(date, 'PPP') : <span>Pick a date</span>}
           </Button>
@@ -36,7 +38,7 @@ const TodoList = () => {
         </PopoverContent>
       </Popover>
       {/* LIST */}
-      <ScrollArea className="max-h-[400px] mt-4 overflow-y-auto">
+      <ScrollArea className="mt-4 min-h-0 max-h-[400px] flex-1">
         <div className="flex flex-col gap-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
             <Card className="p-4" key={i}>
