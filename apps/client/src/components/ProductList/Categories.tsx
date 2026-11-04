@@ -1,6 +1,5 @@
 'use client'
 
-import { ReactElement } from 'react'
 import {
   Footprints,
   Glasses,
@@ -9,94 +8,60 @@ import {
   ShoppingBasket,
   Hand,
   Venus,
+  type LucideIcon,
 } from 'lucide-react'
+import type { CategoryType } from '@repo/types'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ALL, CATEGORY } from './category'
+import { ALL, CATEGORY, isAllCategory } from './category'
 
-type Category = {
-  name: string
-  icon: ReactElement
-  slug: string
-}
+const categoryIcons = new Map<string, LucideIcon>([
+  ['t-shirts', Shirt],
+  ['shoes', Footprints],
+  ['accessories', Glasses],
+  ['bags', Briefcase],
+  ['dresses', Venus],
+  ['jackets', Shirt],
+  ['gloves', Hand],
+])
 
-enum CategorySlug {
-  ALL = 'all',
-  T_SHIRTS = 'T-shirts',
-  SHOES = 'Shoes',
-  ACCESSORIES = 'Accessories',
-  BAGS = 'Bags',
-  DRESSES = 'Dresses',
-  JACKETS = 'Jackets',
-  GLOVES = 'Gloves',
-}
-
-const categories: Category[] = [
-  {
-    name: CategorySlug.ALL,
-    icon: <ShoppingBasket className="w-4 h-4" />,
-    slug: CategorySlug.ALL,
-  },
-  {
-    name: CategorySlug.T_SHIRTS,
-    icon: <Shirt className="w-4 h-4" />,
-    slug: CategorySlug.T_SHIRTS,
-  },
-  {
-    name: CategorySlug.SHOES,
-    icon: <Footprints className="w-4 h-4" />,
-    slug: CategorySlug.SHOES,
-  },
-  {
-    name: CategorySlug.ACCESSORIES,
-    icon: <Glasses className="w-4 h-4" />,
-    slug: CategorySlug.ACCESSORIES,
-  },
-  {
-    name: CategorySlug.BAGS,
-    icon: <Briefcase className="w-4 h-4" />,
-    slug: CategorySlug.BAGS,
-  },
-  {
-    name: CategorySlug.DRESSES,
-    icon: <Venus className="w-4 h-4" />,
-    slug: CategorySlug.DRESSES,
-  },
-  {
-    name: CategorySlug.JACKETS,
-    icon: <Shirt className="w-4 h-4" />,
-    slug: CategorySlug.JACKETS,
-  },
-  {
-    name: CategorySlug.GLOVES,
-    icon: <Hand className="w-4 h-4" />,
-    slug: CategorySlug.GLOVES,
-  },
-]
-
-const Categories = () => {
+const Categories = ({ categories }: { categories: CategoryType[] }) => {
   const searchParams = useSearchParams()
-  const selectedCategory = searchParams.get(CATEGORY)
+  const currentCategory = searchParams.get(CATEGORY)
+  const selectedCategory =
+    !currentCategory || isAllCategory(currentCategory) ? ALL : currentCategory
   const router = useRouter()
   const pathname = usePathname()
+  const filters = [
+    { name: ALL, Icon: ShoppingBasket, slug: ALL },
+    ...categories
+      .filter(({ slug }) => !isAllCategory(slug))
+      .map(({ name, slug }) => ({
+        name,
+        Icon: categoryIcons.get(slug.toLowerCase()) ?? ShoppingBasket,
+        slug,
+      })),
+  ]
 
-  const handleClick = (val: string | null) => {
+  const handleClick = (val: string) => {
     const params = new URLSearchParams(searchParams)
-    params.set(CATEGORY, val || ALL)
+    params.set(CATEGORY, val)
     router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 bg-gray-200 p-2 mb-4 text-sm rounded-lg">
-      {categories.map(({ name, icon, slug }) => (
-        <div
+      {filters.map(({ name, Icon, slug }) => (
+        <button
+          type="button"
+          aria-pressed={slug === selectedCategory}
           className={`flex items-center justify-center gap-2 cursor-pointer px-2 py-1 rounded-md
                       ${slug === selectedCategory ? 'bg-white' : 'text-gray-500'}`}
-          key={name}
+          key={slug}
           onClick={() => handleClick(slug)}
         >
-          {icon}
+          <Icon className="w-4 h-4" />
           {name}
-        </div>
+        </button>
       ))}
     </div>
   )

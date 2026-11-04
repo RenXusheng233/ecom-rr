@@ -3,11 +3,28 @@ import { Request, Response } from 'express'
 import { CategoryFormSchema } from '@repo/types'
 
 export const createCategory = async (req: Request, res: Response) => {
-  const data: Prisma.CategoryCreateInput = req.body
+  const parsed = CategoryFormSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json({ error: 'Invalid category', issues: parsed.error.issues })
+  }
 
-  const category = await prisma.category.create({ data })
+  try {
+    const category = await prisma.category.create({ data: parsed.data })
 
-  res.status(201).json(category)
+    return res.status(201).json(category)
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return res
+        .status(409)
+        .json({ error: 'A category with this slug already exists.' })
+    }
+    throw error
+  }
 }
 
 export const updateCategory = async (req: Request, res: Response) => {

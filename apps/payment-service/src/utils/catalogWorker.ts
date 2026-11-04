@@ -4,6 +4,7 @@ import { paymentPrisma } from '@repo/payment-db'
 import type { CatalogSyncResultEvent } from '@repo/types'
 import { executeCatalogSyncAttempt } from './catalogAttempt'
 import { attemptsForCatalogClaim } from './catalogProcessing'
+import { catalogFailureDetails } from './catalogDiagnostics'
 import {
   getCatalogRetryDecision,
   shouldRotateSyncRunAfterFailure,
@@ -279,6 +280,21 @@ export const runCatalogSyncBatch = async () => {
           const attempt = attempts + 1
           const message = errorMessage(error)
           const decision = getCatalogRetryDecision(error, attempt)
+          if (!(error instanceof CatalogClaimLostError)) {
+            const details = {
+              productId: item.productId,
+              taskId: item.desiredEventId,
+              catalogVersion: item.desiredVersion,
+              operation: item.desiredOperation,
+              attempt,
+              retry: decision.retry,
+              nextAttemptAt: decision.nextAttemptAt?.toISOString() ?? null,
+              ...catalogFailureDetails(error),
+            }
+            if (decision.retry)
+              console.warn('Catalog sync attempt failed', details)
+            else console.error('Catalog sync attempt failed', details)
+          }
 
           if (decision.retry && decision.nextAttemptAt) {
             const updated = await paymentPrisma.stripeCatalogItem.updateMany({

@@ -1,6 +1,11 @@
 import { Product, Category } from '@repo/product-db'
 import { z } from 'zod'
+import { ALL_CATEGORIES_SLUG } from './category'
 export type ProductType = Product
+
+export type AdminProductType = ProductType & {
+  category: Pick<Category, 'id' | 'name' | 'slug'>
+}
 
 export type StripeProductType = {
   id: string
@@ -14,7 +19,14 @@ export type AdminCategoryType = CategoryType & { productCount: number }
 
 export const CategoryFormSchema = z.object({
   name: z.string('Name is required!').trim().min(1, 'Name is required!'),
-  slug: z.string('Slug is required!').trim().min(1, 'Slug is required!'),
+  slug: z
+    .string('Slug is required!')
+    .trim()
+    .min(1, 'Slug is required!')
+    .refine(
+      (slug) => slug.toLowerCase() !== ALL_CATEGORIES_SLUG,
+      'This slug is reserved for the All products filter.',
+    ),
 })
 
 export const COLORS = [

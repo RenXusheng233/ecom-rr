@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
-  ColumnDef,
   flexRender,
   SortingState,
   getCoreRowModel,
@@ -22,22 +21,28 @@ import {
 import { DataTablePagination } from '@/components/TablePagination'
 import { Button } from '@/components/ui/button'
 import { Trash2 } from 'lucide-react'
+import type { AdminProductType } from '@repo/types'
+import DeleteProducts from '@/components/DeleteProducts'
+import { createColumns } from './columns'
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[]
-  data: TData[]
-}
-
-export function DataTable<TData, TValue>({
-  columns,
-  data,
-}: DataTableProps<TData, TValue>) {
+export function DataTable({ data }: { data: AdminProductType[] }) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [rowSelection, setRowSelection] = useState({})
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [targets, setTargets] = useState<AdminProductType[]>([])
+  const columns = useMemo(
+    () =>
+      createColumns((product) => {
+        setTargets([product])
+        setDeleteOpen(true)
+      }),
+    [],
+  )
 
   const table = useReactTable({
     data,
     columns,
+    getRowId: (product) => product.id.toString(),
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
@@ -51,11 +56,17 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="overflow-hidden rounded-md border">
-      {Object.keys(rowSelection).length > 0 && (
+      {table.getSelectedRowModel().rows.length > 0 && (
         <div className="flex justify-end">
           <Button
             size="sm"
             className="bg-red-500 text-white m-2 cursor-pointer hover:bg-red-600"
+            onClick={() => {
+              setTargets(
+                table.getSelectedRowModel().rows.map((row) => row.original),
+              )
+              setDeleteOpen(true)
+            }}
           >
             <Trash2 />
             Delete Product(s)
@@ -105,6 +116,24 @@ export function DataTable<TData, TValue>({
         </TableBody>
       </Table>
       <DataTablePagination table={table} />
+      {deleteOpen ? (
+        <DeleteProducts
+          products={targets}
+          onOpenChange={setDeleteOpen}
+          onResult={(result) => {
+            const deleted = new Set(result.deletedIds.map(String))
+            setRowSelection((previous) =>
+              Object.fromEntries(
+                Object.entries(previous).filter(([id]) => !deleted.has(id)),
+              ),
+            )
+            const failed = new Set(result.failures.map((product) => product.id))
+            setTargets((previous) =>
+              previous.filter((product) => failed.has(product.id)),
+            )
+          }}
+        />
+      ) : null}
     </div>
   )
 }

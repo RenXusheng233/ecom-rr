@@ -27,6 +27,7 @@ import {
 } from './ui/form'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import CategorySlugField from './CategorySlugField'
 
 export default function EditCategory({ category }: { category: CategoryType }) {
   const [open, setOpen] = useState(false)
@@ -113,18 +114,9 @@ export default function EditCategory({ category }: { category: CategoryType }) {
                   </FormItem>
                 )}
               />
-              <FormField
+              <CategorySlugField
                 control={form.control}
-                name="slug"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Slug</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                disabled={mutation.isPending}
               />
               <p className="text-sm text-muted-foreground">
                 Changing the slug also updates products in this category.

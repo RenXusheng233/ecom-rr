@@ -173,6 +173,16 @@ export const archiveStripeCatalogItem = async (
   if (!product) {
     return { stripeProductId: productId, stripePriceId: null }
   }
+  if (product.default_price) {
+    await assertClaimActive?.()
+    await stripe.products.update(
+      productId,
+      { default_price: '' },
+      {
+        idempotencyKey: `catalog:${productId}:v${catalogVersion}:archive:${syncRunId}:product:clear-default-price`,
+      },
+    )
+  }
   const activePrices = await listActivePrices(productId)
   for (const price of activePrices) {
     await assertClaimActive?.()

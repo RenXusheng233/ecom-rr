@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import Categories from './Categories'
 import ProductCard from './ProductCard'
 import Filter from './Filter'
+import { fetchCategories } from '@/lib/categories'
 import { CATEGORY, getCategoryQueryParam, isAllCategory } from './category'
 
 const HOME_PAGE_PRODUCTS_LIMIT = 8
@@ -183,13 +184,24 @@ const ProductList = async ({
   from,
 }: ProductsParams) => {
   // TODO: LOADING
-  const products = await fetchProducts({ category, sort, search, from })
+  const [products, categories] = await Promise.all([
+    fetchProducts({ category, sort, search, from }),
+    fetchCategories(process.env.NEXT_PUBLIC_PRODUCT_SERVICE_URL ?? '').catch(
+      () => null,
+    ),
+  ])
 
   return (
     <div className="w-full">
       <Suspense fallback={null}>
-        <Categories />
+        <Categories categories={categories ?? []} />
       </Suspense>
+      {categories === null ? (
+        <p role="status" className="mb-4 text-sm text-gray-500">
+          Categories are temporarily unavailable. You can still browse all
+          products.
+        </p>
+      ) : null}
       {from === FromPage.Products && (
         <Suspense fallback={null}>
           <Filter />
