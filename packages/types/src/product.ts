@@ -10,9 +10,11 @@ export type StripeProductType = {
 
 export type CategoryType = Category
 
+export type AdminCategoryType = CategoryType & { productCount: number }
+
 export const CategoryFormSchema = z.object({
-  name: z.string('Name is required!').min(1, 'Name is required!'),
-  slug: z.string('Slug is required!').min(1, 'Slug is required!'),
+  name: z.string('Name is required!').trim().min(1, 'Name is required!'),
+  slug: z.string('Slug is required!').trim().min(1, 'Slug is required!'),
 })
 
 export const COLORS = [

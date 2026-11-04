@@ -5,6 +5,7 @@ import {
   ChevronUp,
   Home,
   Inbox,
+  ListTree,
   Plus,
   RefreshCcw,
   Search,
@@ -129,6 +130,14 @@ const renderProductsGroup = () => (
             <Link href="/products">
               <Shirt />
               See All Products
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <Link href="/categories">
+              <ListTree />
+              See All Categories
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

@@ -22,8 +22,9 @@ import {
 } from './ui/form'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-toastify'
+import { useRouter } from 'next/navigation'
 
 const AddCategory = () => {
   const form = useForm<z.infer<typeof CategoryFormSchema>>({
@@ -37,6 +38,8 @@ const AddCategory = () => {
   const { control } = form
 
   const { getToken } = useAuth()
+  const queryClient = useQueryClient()
+  const router = useRouter()
   const mutation = useMutation({
     mutationFn: async (data: z.infer<typeof CategoryFormSchema>) => {
       const token = await getToken()
@@ -57,6 +60,8 @@ const AddCategory = () => {
     },
     onSuccess: () => {
       toast.success('Category created successfully')
+      void queryClient.invalidateQueries({ queryKey: ['categories'] })
+      router.refresh()
     },
     onError: (error) => {
       toast.error(`Error: ${error.message}`)
