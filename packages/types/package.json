@@ -19,6 +19,10 @@
     ".": {
       "import": "./src/index.ts",
       "types": "./src/index.ts"
+    },
+    "./category": {
+      "import": "./src/category.ts",
+      "types": "./src/category.ts"
     }
   }
 }

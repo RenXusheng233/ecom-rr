@@ -14,9 +14,11 @@ import {
 import { Checkbox } from '@/components/ui/checkbox'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ProductType } from '@repo/types'
+import type { AdminProductType } from '@repo/types'
 
-export const columns: ColumnDef<ProductType>[] = [
+export const createColumns = (
+  onDelete: (product: AdminProductType) => void,
+): ColumnDef<AdminProductType>[] => [
   {
     id: 'select',
     header: ({ table }) => (
@@ -64,6 +66,18 @@ export const columns: ColumnDef<ProductType>[] = [
   {
     accessorKey: 'name',
     header: 'Name',
+  },
+  {
+    accessorKey: 'category.name',
+    header: 'Category',
+    cell: ({ row }) => (
+      <div>
+        <p>{row.original.category.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {row.original.category.slug}
+        </p>
+      </div>
+    ),
   },
   {
     accessorKey: 'price',
@@ -128,6 +142,13 @@ export const columns: ColumnDef<ProductType>[] = [
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <Link href={`/products/${product.id}`}>View Product</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => onDelete(product)}
+            >
+              Delete Product
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

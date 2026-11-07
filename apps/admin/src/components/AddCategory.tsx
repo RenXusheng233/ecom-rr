@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useAuth } from '@clerk/nextjs'
 import { CategoryFormSchema } from '@repo/types'
+import { createCategorySlug } from '@repo/types/category'
 import {
   SheetContent,
   SheetDescription,
@@ -22,8 +23,10 @@ import {
 } from './ui/form'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-toastify'
+import { useRouter } from 'next/navigation'
+import CategorySlugField from './CategorySlugField'
 
 const AddCategory = () => {
   const form = useForm<z.infer<typeof CategoryFormSchema>>({
@@ -35,8 +38,11 @@ const AddCategory = () => {
   })
 
   const { control } = form
+  const { dirtyFields, isSubmitted } = form.formState
 
   const { getToken } = useAuth()
+  const queryClient = useQueryClient()
+  const router = useRouter()
   const mutation = useMutation({
     mutationFn: async (data: z.infer<typeof CategoryFormSchema>) => {
       const token = await getToken()
@@ -52,11 +58,14 @@ const AddCategory = () => {
         },
       )
       if (!res.ok) {
-        throw new Error('Failed to create category')
+        const result = await res.json().catch(() => null)
+        throw new Error(result?.error ?? 'Failed to create category')
       }
     },
     onSuccess: () => {
       toast.success('Category created successfully')
+      void queryClient.invalidateQueries({ queryKey: ['categories'] })
+      router.refresh()
     },
     onError: (error) => {
       toast.error(`Error: ${error.message}`)
@@ -80,26 +89,29 @@ const AddCategory = () => {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event)
+                          if (!dirtyFields.slug) {
+                            form.setValue(
+                              'slug',
+                              createCategorySlug(event.target.value),
+                              { shouldValidate: isSubmitted },
+                            )
+                          }
+                        }}
+                      />
                     </FormControl>
                     <FormDescription>Enter the category name.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              <FormField
+              <CategorySlugField
                 control={control}
-                name="slug"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Slug</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormDescription>Enter the category slug.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                disabled={mutation.isPending}
+                description="Choose one of the seven presets using the arrow, or enter a custom slug. Generated from the name until you choose or type a slug."
               />
               <Button
                 type="submit"

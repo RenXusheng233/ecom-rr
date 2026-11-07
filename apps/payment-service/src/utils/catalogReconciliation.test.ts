@@ -66,13 +66,14 @@ function fixture() {
     id: 'product-1',
     name: 'Trail shoe',
     active: true,
-    default_price: price,
+    default_price: price as typeof price | null,
     metadata: { managed_by: 'ecom-rr-payment-service', catalog_version: '1' },
   }
   let known = false
   let snapshot: StripeCatalogItem[] = []
   let afterList = () => {}
   let afterPriceArchive = () => {}
+  let afterDefaultClear = () => {}
   let afterProductArchive = () => {}
   const outbox: Array<{ messageKey: string; payload: CatalogSyncResultEvent }> =
     []
@@ -119,17 +120,33 @@ function fixture() {
     },
   }))
   mock.method(stripe.prices, 'update', async () => {
+    if (product.default_price?.id === price.id)
+      throw new Error('The default price cannot be archived')
     price.active = false
     archived.push(price.id)
     afterPriceArchive()
     return price
   })
-  mock.method(stripe.products, 'update', async () => {
-    product.active = false
-    archived.push(product.id)
-    afterProductArchive()
-    return product
-  })
+  mock.method(
+    stripe.products,
+    'update',
+    async (
+      id: string,
+      params: { default_price?: string; active?: boolean },
+    ) => {
+      assert.equal(id, 'product-1')
+      if (params.default_price === '') {
+        product.default_price = null
+        afterDefaultClear()
+      }
+      if (params.active === false) {
+        product.active = false
+        archived.push(product.id)
+        afterProductArchive()
+      }
+      return product
+    },
+  )
   return {
     item,
     price,
@@ -148,6 +165,9 @@ function fixture() {
     },
     afterPriceArchive: (callback: () => void) => {
       afterPriceArchive = callback
+    },
+    afterDefaultClear: (callback: () => void) => {
+      afterDefaultClear = callback
     },
     afterProductArchive: (callback: () => void) => {
       afterProductArchive = callback
@@ -178,6 +198,18 @@ test('stops archiving and durably repairs a product that becomes known during a 
   assert.equal(state.outbox[0]?.payload.status, 'FAILED')
   assert.equal(state.outbox[0]?.payload.resultRevision, 2)
   assert.equal(state.outbox[0]?.payload.catalogVersion, 1)
+  assert.equal(result.archivedOrphans, 0)
+})
+
+test('repairs a ledger entry arriving while the default price is cleared', async () => {
+  const state = fixture()
+  state.afterDefaultClear(state.setKnown)
+  const result = await runCatalogReconciliation()
+  assert.deepEqual(state.archived, [])
+  assert.equal(state.price.active, true)
+  assert.equal(state.product.active, true)
+  assert.equal(state.item.status, 'PENDING')
+  assert.equal(state.outbox.length, 1)
   assert.equal(result.archivedOrphans, 0)
 })
 

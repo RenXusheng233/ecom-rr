@@ -1,7 +1,11 @@
 import { Request, Response } from 'express'
-import { prisma, Prisma } from '@repo/product-db'
+import { prisma, Prisma, type ProductOutboxEvent } from '@repo/product-db'
 import { randomUUID } from 'node:crypto'
-import { ProductFormSchema, ProductUpdateSchema } from '@repo/types'
+import {
+  ProductFormSchema,
+  ProductUpdateSchema,
+  type ProductDeletionTask,
+} from '@repo/types'
 import { createCatalogSyncRequestedEvent } from '../utils/catalogSync'
 
 const createOutboxEvent = async (
@@ -29,7 +33,7 @@ const createOutboxEvent = async (
     colors: product.colors,
   })
 
-  await tx.productOutboxEvent.create({
+  return tx.productOutboxEvent.create({
     data: {
       id: eventId,
       aggregateId: product.id.toString(),
@@ -133,30 +137,106 @@ export const updateProduct = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
   const { id } = req.params
   const productId = Number(id)
+  if (
+    !Number.isSafeInteger(productId) ||
+    productId < 1 ||
+    productId > 2147483647
+  ) {
+    return res.status(400).json({ error: 'Invalid product ID' })
+  }
 
-  const deletedProduct = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`
+  try {
+    const deletedProduct = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
       SELECT "id"
       FROM "Product"
       WHERE "id" = ${productId}
       FOR UPDATE
     `
-    const product = await tx.product.findUniqueOrThrow({
-      where: { id: productId },
+      const product = await tx.product.findUnique({
+        where: { id: productId },
+      })
+      if (!product) {
+        const previous = await tx.productOutboxEvent.findFirst({
+          where: { aggregateId: productId.toString(), operation: 'ARCHIVE' },
+          orderBy: { aggregateVersion: 'desc' },
+        })
+        return previous
+          ? { id: productId, deletionTask: deletionTaskFromEvent(previous) }
+          : null
+      }
+      const archiveVersion = product.catalogVersion + 1
+
+      await tx.product.delete({ where: { id: product.id } })
+      const archive = await createOutboxEvent(
+        tx,
+        { ...product, catalogVersion: archiveVersion },
+        'ARCHIVE',
+      )
+
+      return { ...product, deletionTask: deletionTaskFromEvent(archive) }
     })
-    const archiveVersion = product.catalogVersion + 1
 
-    await tx.product.delete({ where: { id: product.id } })
-    await createOutboxEvent(
-      tx,
-      { ...product, catalogVersion: archiveVersion },
-      'ARCHIVE',
-    )
+    if (!deletedProduct)
+      return res.status(404).json({ error: 'Product not found' })
+    return res.status(200).json(deletedProduct)
+  } catch {
+    return res.status(503).json({
+      error:
+        'Product deletion could not be completed. Please retry the request.',
+    })
+  }
+}
 
-    return product
-  })
+const deletionTaskFromEvent = (
+  event: Pick<
+    ProductOutboxEvent,
+    | 'id'
+    | 'aggregateId'
+    | 'aggregateVersion'
+    | 'createdAt'
+    | 'status'
+    | 'lastError'
+  >,
+): ProductDeletionTask => ({
+  taskId: event.id,
+  productId: Number(event.aggregateId),
+  catalogVersion: event.aggregateVersion,
+  deletedAt: event.createdAt.toISOString(),
+  dispatchStatus: event.status,
+  dispatchError: event.lastError
+    ? 'The archive request could not be published. The service will retry automatically.'
+    : null,
+})
 
-  res.status(200).json(deletedProduct)
+export const getProductDeletions = async (req: Request, res: Response) => {
+  const limit = req.query.limit === undefined ? 20 : Number(req.query.limit)
+  const cursor = req.query.cursor
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 50 ||
+    (cursor !== undefined &&
+      (typeof cursor !== 'string' || !cursor || cursor.length > 200))
+  ) {
+    return res.status(400).json({ error: 'Invalid deletion page' })
+  }
+  try {
+    const events = await prisma.productOutboxEvent.findMany({
+      where: { operation: 'ARCHIVE' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    })
+    return res.status(200).json({
+      tasks: events.slice(0, limit).map(deletionTaskFromEvent),
+      nextCursor: events.length > limit ? events[limit - 1]!.id : null,
+    })
+  } catch {
+    return res
+      .status(503)
+      .json({ error: 'Deletion tasks could not be loaded. Please try again.' })
+  }
 }
 
 export const getProducts = async (req: Request, res: Response) => {
@@ -237,6 +317,7 @@ export const getProduct = async (req: Request, res: Response) => {
 export const getAdminProducts = async (req: Request, res: Response) => {
   const products = await prisma.product.findMany({
     orderBy: { createdAt: 'desc' },
+    include: { category: { select: { id: true, name: true, slug: true } } },
   })
 
   res.status(200).json(products)
