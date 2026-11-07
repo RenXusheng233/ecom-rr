@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -146,11 +148,9 @@ const renderProductsGroup = () => (
         <SidebarMenuItem>
           <Sheet>
             <SheetTrigger asChild>
-              <SidebarMenuButton asChild>
-                <Link href="#">
-                  <Plus />
-                  Add Product
-                </Link>
+              <SidebarMenuButton>
+                <Plus />
+                Add Product
               </SidebarMenuButton>
             </SheetTrigger>
             <AddProduct />
@@ -159,11 +159,9 @@ const renderProductsGroup = () => (
         <SidebarMenuItem>
           <Sheet>
             <SheetTrigger asChild>
-              <SidebarMenuButton asChild>
-                <Link href="#">
-                  <Plus />
-                  Add Category
-                </Link>
+              <SidebarMenuButton>
+                <Plus />
+                Add Category
               </SidebarMenuButton>
             </SheetTrigger>
             <AddCategory />
@@ -195,11 +193,9 @@ const renderUsersGroup = () => (
         <SidebarMenuItem>
           <Sheet>
             <SheetTrigger asChild>
-              <SidebarMenuButton asChild>
-                <Link href="#">
-                  <Plus />
-                  Add User
-                </Link>
+              <SidebarMenuButton>
+                <Plus />
+                Add User
               </SidebarMenuButton>
             </SheetTrigger>
             <AddUser />
@@ -239,11 +235,9 @@ const renderOrdersGroup = () => (
         <SidebarMenuItem>
           <Sheet>
             <SheetTrigger asChild>
-              <SidebarMenuButton asChild>
-                <Link href="#">
-                  <Plus />
-                  Add Order
-                </Link>
+              <SidebarMenuButton>
+                <Plus />
+                Add Order
               </SidebarMenuButton>
             </SheetTrigger>
             <AddOrder />
